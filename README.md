@@ -1,6 +1,15 @@
-# Intraday Options Decision Intelligence Engine
+# ODX - Options Decision Intelligence Engine
 
 > A real-time intraday decision-support system for NIFTY & BANKNIFTY options trading
+
+[![Phase](https://img.shields.io/badge/Phase-0%20Complete-brightgreen)](https://github.com/Ajinkyaa2004/ODX)
+[![Services](https://img.shields.io/badge/Services-8%20Running-blue)](#services)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](https://www.docker.com/)
+[![License](https://img.shields.io/badge/License-Private-red)]()
+
+## 🎯 Project Status
+
+**✅ Phase 0 Complete** - Microservices Infrastructure fully operational!
 
 ## 🎯 Project Overview
 
@@ -172,6 +181,92 @@ SPRING_PROFILES_ACTIVE=development
 
 This is a structured project following strict architectural principles. 
 See [PHASES.md](PHASES.md) for implementation roadmap.
+
+## 🎯 Services Overview
+
+| Service | Port | Technology | Status | Purpose |
+|---------|------|------------|--------|---------|
+| **API Gateway** | 8080 | Spring Cloud Gateway | ✅ Running | Central routing & CORS |
+| **Market Data** | 8081 | Spring Boot + WebFlux | ✅ Running | FYERS WebSocket integration |
+| **Option Chain** | 8082 | Spring Boot + WebFlux | ✅ Running | Options data & OI analysis |
+| **Risk Service** | 8083 | Spring Boot + WebFlux | ✅ Running | Risk calculation & PnL |
+| **Journal** | 8084 | Spring Boot + WebFlux | ✅ Running | Trade logging & analytics |
+| **Quant Engine** | 8001 | Python FastAPI | ✅ Running | Scoring & indicators |
+| **AI Reasoning** | 8002 | Python FastAPI | ✅ Running | LLM-powered explanations |
+| **Frontend** | 3000 | Next.js 14 | ✅ Running | Real-time dashboard |
+
+## 🔧 Development Commands
+
+```bash
+# Start services
+docker compose up -d
+
+# Stop services
+docker compose down
+
+# View logs (all services)
+docker compose logs -f
+
+# View logs (specific service)
+docker compose logs -f market-data-service
+
+# Rebuild after code changes
+docker compose up --build -d
+
+# Check running containers
+docker compose ps
+
+# Run health checks
+./scripts/health-check.sh
+```
+
+## 📂 Project Documentation
+
+- [PHASES.md](PHASES.md) - Complete development roadmap
+- [PHASE_0_COMPLETE.md](PHASE_0_COMPLETE.md) - Phase 0 completion report
+- [PHASE_0_SETUP.md](PHASE_0_SETUP.md) - Setup instructions
+
+## 🔐 Security Note
+
+⚠️ **Important:** Never commit your `.env` file! It contains sensitive API keys.
+- The `.gitignore` is configured to exclude `.env`
+- Use `.env.example` as a template
+- Store production secrets in secure vaults (AWS Secrets Manager, etc.)
+
+## 📊 Current Implementation Status
+
+### ✅ Completed (Phase 0)
+- Microservices architecture setup
+- Docker containerization for all services
+- API Gateway with routing configuration
+- MongoDB Atlas connection
+- Environment configuration system
+- Health check endpoints
+- Development scripts
+
+### 🔄 In Progress (Phase 1)
+- FYERS WebSocket integration
+- Real-time market data pipeline
+- EMA & VWAP calculations
+- Frontend live dashboard
+
+## 🚀 Deployment
+
+Will be deployed to:
+- AWS ECS/EKS for container orchestration
+- MongoDB Atlas for database
+- CloudFront for CDN
+- API Gateway for load balancing
+
+## 📄 License
+
+Private Project - Not for distribution
+
+---
+
+**Built with clean architecture, deterministic logic, and explainability at its core.**
+
+🔗 **Repository:** [github.com/Ajinkyaa2004/ODX](https://github.com/Ajinkyaa2004/ODX)
 
 ## 📄 License
 
