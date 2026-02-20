@@ -208,26 +208,123 @@ Open [http://localhost:3000](http://localhost:3000) to see the dashboard 🎉
 
 ## 🏗️ Architecture
 
+### System Flow
+
+```mermaid
+graph TB
+    A[User Browser] -->|HTTPS| B[Next.js Frontend :3000]
+    B -->|WebSocket| B
+    B -->|HTTP/REST| C[API Gateway :8080]
+    
+    C -->|Route| D[Market Data Service :8081]
+    C -->|Route| E[Option Chain Service :8082]
+    C -->|Route| F[Risk Service :8083]
+    C -->|Route| G[Journal Service :8084]
+    C -->|Route| H[Quant Engine :8001]
+    C -->|Route| I[AI Reasoning :8002]
+    
+    D -->|WebSocket| J[FYERS API]
+    D -->|Store OHLC| K[(MongoDB Atlas)]
+    E -->|Store OI| K
+    F -->|Store Risk| K
+    G -->|Store Trades| K
+    
+    H -->|Read Market Data| K
+    H -->|Calculate Scores| L[Pandas/NumPy]
+    H -->|Store Scores| K
+    
+    I -->|Read Context| K
+    I -->|LLM Inference| M[GROQ API - Llama 3.1]
+    I -->|Store Insights| K
+    
+    B -->|Socket.io Push| N[Real-time Updates]
+    
+    style B fill:#000,stroke:#fff,color:#fff
+    style C fill:#6DB33F,stroke:#fff,color:#fff
+    style D fill:#0070f3,stroke:#fff,color:#fff
+    style H fill:#009688,stroke:#fff,color:#fff
+    style I fill:#ffa116,stroke:#fff,color:#000
+    style J fill:#ff6b35,stroke:#fff,color:#fff
+    style K fill:#47A248,stroke:#fff,color:#fff
+    style M fill:#ffa116,stroke:#fff,color:#000
 ```
-Frontend (Next.js) → API Gateway (Spring Boot) → Microservices
-                                                  ├── Market Data Service
-                                                  ├── Option Chain Service
-                                                  ├── Risk Service
-                                                  ├── Journal Service
-                                                  ├── Quant Engine (Python)
-                                                  └── AI Reasoning (Python)
-                                                           ↓
-                                                  MongoDB Atlas
+
+### Scoring Logic Flow
+
+```mermaid
+graph LR
+    A[Market Data<br/>1min OHLC] -->|Stream| B[Quant Engine]
+    C[Option Chain<br/>OI Data] -->|Query| B
+    
+    B -->|Calculate| D[EMA 9,20,50]
+    B -->|Calculate| E[VWAP]
+    B -->|Calculate| F[Structure]
+    
+    D --> G[Trend Score<br/>25%]
+    E --> H[VWAP Score<br/>15%]
+    F --> I[Structure Score<br/>15%]
+    C --> J[OI Score<br/>20%]
+    
+    G --> K[Setup Score<br/>0-10]
+    H --> K
+    I --> K
+    J --> K
+    
+    K -->|If >= Threshold| L[AI Reasoning]
+    L -->|Generate| M[Explanation]
+    M --> N[Frontend Display]
+    
+    style B fill:#009688,stroke:#fff,color:#fff
+    style K fill:#4CAF50,stroke:#fff,color:#fff
+    style L fill:#ffa116,stroke:#fff,color:#000
+    style N fill:#000,stroke:#fff,color:#fff
+```
+
+### Data Flow During Market Hours
+
+```mermaid
+sequenceDiagram
+    participant F as FYERS API
+    participant M as Market Data Service
+    participant DB as MongoDB
+    participant Q as Quant Engine
+    participant A as AI Reasoning
+    participant UI as Frontend
+
+    loop Every 1 minute (9:15-3:30 IST)
+        F->>M: WebSocket: OHLC Data
+        M->>DB: Store Snapshot (every 3min)
+        M->>UI: Push Live Price
+        
+        Note over Q: 3-minute Cycle
+        Q->>DB: Fetch OHLC Data
+        Q->>Q: Calculate EMA, VWAP
+        Q->>DB: Store Indicators
+        
+        Q->>Q: Compute Setup Score
+        
+        alt Score >= Threshold
+            Q->>A: Request AI Analysis
+            A->>DB: Fetch Context
+            A->>A: Generate Reasoning
+            A->>DB: Store Insight
+            A->>UI: Push Recommendation
+        else Score < Threshold
+            Q->>UI: No Trade Signal
+        end
+    end
 ```
 
 ### Design Patterns
 
 | Pattern | Implementation | Benefit |
 |---------|----------------|---------|
-| **Microservices Architecture** | 8 independent services | Scalability, fault isolation |
-| **API Gateway Pattern** | Spring Cloud Gateway | Single entry point, routing |
-| **Reactive Programming** | Spring WebFlux | Non-blocking I/O |
-| **Event-Driven** | WebSocket + Socket.io | Real-time updates |
+| **Microservices Architecture** | 8 independent services | Scalability, fault isolation, technology diversity |
+| **API Gateway Pattern** | Spring Cloud Gateway | Single entry point, routing, CORS |
+| **Reactive Programming** | Spring WebFlux | Non-blocking I/O, efficient resources |
+| **Event-Driven** | WebSocket + Socket.io | Real-time updates, low latency |
+| **Repository Pattern** | MongoDB Reactive Repos | Data abstraction, testability |
+| **Service Layer** | Business logic separation | Maintainability, single responsibility |
 
 ---
 
