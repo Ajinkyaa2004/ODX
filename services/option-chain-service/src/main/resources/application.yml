@@ -1,0 +1,31 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: option-chain-service
+  data:
+    mongodb:
+      uri: ${MONGODB_URI}
+      database: ${MONGODB_DATABASE:intraday_decision}
+  webflux:
+    base-path: /api/option-chain
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+fyers:
+  app-id: ${FYERS_APP_ID:}
+  access-token: ${FYERS_ACCESS_TOKEN:}
+
+lot-sizes:
+  nifty: ${NIFTY_LOT_SIZE:50}
+  banknifty: ${BANKNIFTY_LOT_SIZE:15}
+
+logging:
+  level:
+    root: INFO
+    com.intraday: DEBUG

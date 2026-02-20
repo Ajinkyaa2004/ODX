@@ -1,0 +1,50 @@
+server:
+  port: 8081
+  error:
+    include-message: always
+
+spring:
+  application:
+    name: market-data-service
+  
+  data:
+    mongodb:
+      uri: ${MONGODB_URI}
+      database: ${MONGODB_DATABASE:intraday_decision}
+  
+  webflux:
+    base-path: /api/market-data
+
+# Management & Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# Market Configuration
+market:
+  start-time: ${MARKET_START_TIME:09:15}
+  end-time: ${MARKET_END_TIME:15:30}
+  timezone: Asia/Kolkata
+
+# FYERS Configuration
+fyers:
+  app-id: ${FYERS_APP_ID:}
+  access-token: ${FYERS_ACCESS_TOKEN:}
+  websocket-url: wss://api.fyers.in/socket/v2/data
+
+# Evaluation Configuration
+evaluation:
+  interval-minutes: ${EVALUATION_INTERVAL_MINUTES:3}
+
+# Logging
+logging:
+  level:
+    root: INFO
+    com.intraday: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"

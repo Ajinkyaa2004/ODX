@@ -1,0 +1,84 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  
+  cloud:
+    gateway:
+      routes:
+        # Market Data Service
+        - id: market-data-service
+          uri: ${MARKET_DATA_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/market-data/**
+          filters:
+            - StripPrefix=0
+        
+        # Option Chain Service
+        - id: option-chain-service
+          uri: ${OPTION_CHAIN_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/option-chain/**
+          filters:
+            - StripPrefix=0
+        
+        # Risk Service
+        - id: risk-service
+          uri: ${RISK_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/risk/**
+          filters:
+            - StripPrefix=0
+        
+        # Journal Service
+        - id: journal-service
+          uri: ${JOURNAL_SERVICE_URL:http://localhost:8084}
+          predicates:
+            - Path=/api/journal/**
+          filters:
+            - StripPrefix=0
+        
+        # Quant Engine
+        - id: quant-engine
+          uri: ${QUANT_ENGINE_URL:http://localhost:8001}
+          predicates:
+            - Path=/api/quant/**
+          filters:
+            - StripPrefix=0
+        
+        # AI Reasoning Service
+        - id: ai-reasoning-service
+          uri: ${AI_REASONING_SERVICE_URL:http://localhost:8002}
+          predicates:
+            - Path=/api/ai/**
+          filters:
+            - StripPrefix=0
+      
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+      
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+            exposedHeaders: "*"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,gateway
+
+logging:
+  level:
+    root: INFO
+    org.springframework.cloud.gateway: DEBUG

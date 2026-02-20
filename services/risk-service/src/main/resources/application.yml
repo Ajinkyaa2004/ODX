@@ -1,0 +1,31 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: risk-service
+  data:
+    mongodb:
+      uri: ${MONGODB_URI}
+      database: ${MONGODB_DATABASE:intraday_decision}
+  webflux:
+    base-path: /api/risk
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+lot-sizes:
+  nifty: ${NIFTY_LOT_SIZE:50}
+  banknifty: ${BANKNIFTY_LOT_SIZE:15}
+
+brokerage:
+  angel-one: ${ANGEL_ONE_BROKERAGE:20}
+  fyers: ${FYERS_BROKERAGE:20}
+
+logging:
+  level:
+    root: INFO
+    com.intraday: DEBUG
