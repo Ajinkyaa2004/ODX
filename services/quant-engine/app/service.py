@@ -3,10 +3,13 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from decimal import Decimal
 import logging
+import aiohttp
+import time
 
 from app.config import settings
 from app.indicators import IndicatorCalculator
 from app.models import IndicatorData, EMAData, VWAPData
+from app.scoring import SetupScorer
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +242,162 @@ class IndicatorService:
         except Exception as e:
             logger.error(f"Error fetching latest indicators: {e}")
             return None
+    
+    # ============================================================================
+    # Phase 2: Scoring Methods
+    # ============================================================================
+    
+    async def fetch_oi_analysis(self, symbol: str) -> Optional[Dict]:
+        """
+        Fetch OI analysis from option-chain-service (Phase 3)
+        Returns None if service unavailable or Phase 3 not implemented yet
+        """
+        try:
+            url = f"http://option-chain-service:8082/api/option-chain/{symbol}/analysis"
+            timeout = aiohttp.ClientTimeout(total=5)
+            
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        return await response.json()
+                    else:
+                        logger.warning(f"option-chain-service returned {response.status} for {symbol}")
+                        return None
+                        
+        except aiohttp.ClientError as e:
+            logger.warning(f"Failed to fetch OI analysis for {symbol}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching OI analysis for {symbol}: {e}")
+            return None
+    
+    async def calculate_score_for_symbol(
+        self, 
+        symbol: str, 
+        timeframe: str = "5m"
+    ) -> Optional[Dict]:
+        """
+        Calculate setup score for a symbol using all scoring components
+        """
+        start_time = time.time()
+        
+        try:
+            # Initialize scorer
+            scorer = SetupScorer()
+            
+            # Fetch recent market snapshots (last 4 hours)
+            market_data = await self.get_market_snapshots(
+                symbol=symbol,
+                hours=4 
+            )
+            
+            if not market_data:
+                logger.error(f"No market data available for {symbol}")
+                return None
+            
+            # Fetch latest indicators
+            indicators = await self.get_latest_indicators(symbol, timeframe)
+            
+            if not indicators:
+                logger.warning(f"No indicators available for {symbol}, calculating now...")
+                # Calculate indicators on-the-fly
+                indicator_result = await self.calculate_indicators_for_symbol(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    hours=4
+                )
+                if not indicator_result:
+                    logger.error(f"Failed to calculate indicators for {symbol}")
+                    return None
+            
+            # Fetch OI analysis from Phase 3 service (if available)
+            oi_analysis = await self.fetch_oi_analysis(symbol)
+            
+            # Prepare data for scorer
+            score_data = {
+                'symbol': symbol,
+                'timeframe': timeframe,
+                'market_snapshots': market_data,
+                'indicators': indicators if indicators else indicator_result,
+                'oi_analysis': oi_analysis
+            }
+            
+            # Calculate score
+            result = scorer.calculate_setup_score(score_data)
+            
+            # Add timing information
+            result['evaluation_time_seconds'] = round(time.time() - start_time, 3)
+            result['timestamp'] = datetime.utcnow()
+            
+            # Store in database
+            await self.store_score_data(result)
+            
+            logger.info(
+                f"Calculated score for {symbol} ({timeframe}): "
+                f"{result['setup_score']:.2f} - {result['market_bias']}"
+            )
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error calculating score for {symbol}: {e}")
+            return None
+    
+    async def store_score_data(self, score_data: Dict) -> None:
+        """
+        Store calculated score in MongoDB
+        """
+        try:
+            if not self.db:
+                await self.connect_db()
+            
+            document = {
+                'symbol': score_data['symbol'],
+                'timeframe': score_data['timeframe'],
+                'timestamp': score_data['timestamp'],
+                'setup_score': score_data['setup_score'],
+                'market_bias': score_data['market_bias'],
+                'components': score_data['components'],
+                'evaluation_time_seconds': score_data['evaluation_time_seconds'],
+                'created_at': datetime.utcnow()
+            }
+            
+            await self.db.scoring_snapshots.insert_one(document)
+            logger.info(
+                f"Stored score for {score_data['symbol']} ({score_data['timeframe']}): "
+                f"{score_data['setup_score']:.2f}"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error storing score data: {e}")
+    
+    async def get_score_history(
+        self, 
+        symbol: str, 
+        timeframe: str = "5m",
+        limit: int = 20
+    ) -> List[Dict]:
+        """
+        Get historical scores for a symbol
+        """
+        try:
+            if not self.db:
+                await self.connect_db()
+            
+            cursor = self.db.scoring_snapshots.find(
+                {'symbol': symbol, 'timeframe': timeframe}
+            ).sort('timestamp', -1).limit(limit)
+            
+            scores = []
+            async for doc in cursor:
+                doc['_id'] = str(doc['_id'])
+                scores.append(doc)
+            
+            return scores
+            
+        except Exception as e:
+            logger.error(f"Error fetching score history: {e}")
+            return []
 
 
 # Global service instance
