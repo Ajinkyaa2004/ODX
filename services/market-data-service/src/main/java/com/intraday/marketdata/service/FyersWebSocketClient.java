@@ -33,7 +33,6 @@ public class FyersWebSocketClient {
     private WebSocket webSocket;
     private OkHttpClient client;
     private final AtomicBoolean connected = new AtomicBoolean(false);
-    private final Map<String, Map<String, BigDecimal>> symbolData = new HashMap<>();
     
     // FYERS symbol format: NSE:NIFTY50-INDEX, NSE:NIFTYBANK-INDEX
     private static final Map<String, String> SYMBOL_MAP = Map.of(

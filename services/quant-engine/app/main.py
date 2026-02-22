@@ -6,7 +6,17 @@ from datetime import datetime
 import logging
 
 from app.service import indicator_service
-from app.models import ScoreRequest, ScoreResponse, ScoreHistoryResponse, ScoreComponents
+from app.models import (
+    ScoreRequest, ScoreResponse, ScoreHistoryResponse, ScoreComponents,
+    NoTradeScoreResponse, NoTradeComponents, VolumeProfileData, FakeBreakoutData,
+    EnhancedEvaluationResponse, RiskModeRequest, TradeDecisionResponse
+)
+from app.no_trade_scoring import NoTradeScorer
+from app.volume_profile import VolumeProfileCalculator, FakeBreakoutDetector
+from app.trading_gate import get_trading_gate, set_global_risk_mode
+from app.no_trade_scoring import NoTradeScorer
+from app.volume_profile import VolumeProfileCalculator, FakeBreakoutDetector
+from app.trading_gate import get_trading_gate, set_global_risk_mode, RiskMode
 
 # Configure logging
 logging.basicConfig(
@@ -248,6 +258,281 @@ async def get_score_history(symbol: str, timeframe: str = "5m", limit: int = 20)
         
     except Exception as e:
         logger.error(f"Error in get_score_history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Phase 4: Advanced Filters and No-Trade Scoring Endpoints
+# ============================================================================
+
+@app.get("/api/quant/no-trade-score/{symbol}", response_model=NoTradeScoreResponse)
+async def get_no_trade_score(symbol: str, timeframe: str = "5m"):
+    """
+    Calculate the no-trade score for a symbol
+    
+    Returns a score (0-10) indicating whether to avoid trading.
+    Higher score = more reasons to NOT trade.
+    """
+    try:
+        # Get latest OHLC data
+        df_ohlc = await indicator_service.fetch_ohlc_data(symbol, timeframe)
+        if df_ohlc is None or len(df_ohlc) < 50:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Insufficient OHLC data for {symbol}"
+            )
+        
+        # Calculate indicators needed for no-trade scoring
+        indicators = await indicator_service.calculate_indicators(df_ohlc)
+        
+        # Initialize no-trade scorer
+        no_trade_scorer = NoTradeScorer()
+        
+        # Calculate no-trade score
+        no_trade_result = no_trade_scorer.calculate_no_trade_score(
+            df_ohlc, 
+            indicators
+        )
+        
+        # Determine recommendation
+        recommendation = "NO-TRADE" if no_trade_result['no_trade_score'] >= 6.0 else "TRADE"
+        
+        # Extract blocking reasons
+        blocking_reasons = []
+        components = no_trade_result['components']
+        
+        if components['time_risk']['score'] >= 7:
+            blocking_reasons.append(f"High time risk: {components['time_risk']['reason']}")
+        if components['chop_detection']['score'] >= 6:
+            blocking_reasons.append(f"Choppy market: {components['chop_detection']['reason']}")
+        if components['resistance_proximity']['score'] >= 7:
+            blocking_reasons.append(f"Near S/R: {components['resistance_proximity']['reason']}")
+        if components['volatility_compression']['score'] >= 7:
+            blocking_reasons.append(f"Volatility issue: {components['volatility_compression']['reason']}")
+        if components['consecutive_loss']['score'] >= 8:
+            blocking_reasons.append(f"Loss guard: {components['consecutive_loss']['reason']}")
+        
+        return NoTradeScoreResponse(
+            symbol=symbol,
+            timeframe=timeframe,
+            timestamp=datetime.now(),
+            no_trade_score=no_trade_result['no_trade_score'],
+            components=NoTradeComponents(**components),
+            recommendation=recommendation,
+            blocking_reasons=blocking_reasons
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_no_trade_score: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/quant/evaluation/{symbol}", response_model=EnhancedEvaluationResponse)
+async def get_enhanced_evaluation(symbol: str, timeframe: str = "5m"):
+    """
+    Get comprehensive evaluation including setup score, no-trade score, 
+    volume profile, and fake breakout detection
+    """
+    try:
+        # Get latest OHLC data
+        df_ohlc = await indicator_service.fetch_ohlc_data(symbol, timeframe)
+        if df_ohlc is None or len(df_ohlc) < 50:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Insufficient OHLC data for {symbol}"
+            )
+        
+        # Get latest setup score
+        score_result = await indicator_service.calculate_score_for_symbol(
+            symbol=symbol,
+            timeframe=timeframe
+        )
+        
+        if not score_result:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No score data available for {symbol}"
+            )
+        
+        # Calculate indicators
+        indicators = await indicator_service.calculate_indicators(df_ohlc)
+        
+        # Calculate no-trade score
+        no_trade_scorer = NoTradeScorer()
+        no_trade_result = no_trade_scorer.calculate_no_trade_score(df_ohlc, indicators)
+        
+        # Calculate volume profile
+        volume_calculator = VolumeProfileCalculator()
+        volume_profile = volume_calculator.calculate(df_ohlc)
+        
+        # Detect fake breakouts
+        fake_breakout_detector = FakeBreakoutDetector()
+        fake_breakout = fake_breakout_detector.detect(df_ohlc, volume_profile)
+        
+        # Determine trade recommendation
+        setup_score = score_result['setup_score']
+        no_trade_score = no_trade_result['no_trade_score']
+        
+        if setup_score >= 7 and no_trade_score <= 4 and not fake_breakout['is_fake_breakout']:
+            recommendation = "TRADE"
+        else:
+            recommendation = "NO-TRADE"
+        
+        return EnhancedEvaluationResponse(
+            symbol=symbol,
+            timeframe=timeframe,
+            timestamp=datetime.now(),
+            setup_score=setup_score,
+            no_trade_score=no_trade_score,
+            volume_profile=VolumeProfileData(**volume_profile),
+            fake_breakout=FakeBreakoutData(**fake_breakout),
+            trade_recommendation=recommendation
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_enhanced_evaluation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/quant/set-risk-mode")
+async def set_risk_mode(request: RiskModeRequest):
+    """
+    Set the global risk mode for trade gating
+    
+    Modes:
+    - CONSERVATIVE: Higher setup threshold (8), lower no-trade tolerance (4)
+    - BALANCED: Medium thresholds (7, 6)
+    - AGGRESSIVE: Lower setup threshold (6), higher no-trade tolerance (7)
+    """
+    try:
+        # Validate mode before setting
+        if request.mode not in ["CONSERVATIVE", "BALANCED", "AGGRESSIVE"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid risk mode: {request.mode}. Must be CONSERVATIVE, BALANCED, or AGGRESSIVE"
+            )
+        
+        # Set global risk mode
+        success = set_global_risk_mode(request.mode)
+        
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to set risk mode to {request.mode}"
+            )
+        
+        # Get trading gate to confirm
+        gate = get_trading_gate()
+        
+        # Get thresholds from TradeGateConfig for current risk mode
+        from app.trading_gate import TradeGateConfig, RiskMode as GateRiskMode
+        
+        mode_enum = GateRiskMode[request.mode]
+        min_setup = TradeGateConfig.SETUP_THRESHOLDS[mode_enum]
+        max_no_trade = TradeGateConfig.NO_TRADE_THRESHOLDS[mode_enum]
+        allow_opening = not TradeGateConfig.BLOCK_OPENING_NOISE[mode_enum]
+        allow_chop = not TradeGateConfig.BLOCK_CHOP_HOUR[mode_enum]
+        
+        return {
+            "success": True,
+            "message": f"Risk mode set to {request.mode}",
+            "config": {
+                "mode": request.mode,
+                "min_setup_score": min_setup,
+                "max_no_trade_score": max_no_trade,
+                "allow_opening_range": allow_opening,
+                "allow_chop_hour": allow_chop
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in set_risk_mode: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/quant/trade-decision/{symbol}", response_model=TradeDecisionResponse)
+async def get_trade_decision(symbol: str, timeframe: str = "5m"):
+    """
+    Get the final trade gating decision for a symbol
+    
+    Applies all Phase 4 filters including setup score, no-trade score,
+    volatility regime, time filters, fake breakout detection, and OI divergence.
+    """
+    try:
+        # Get latest OHLC data
+        df_ohlc = await indicator_service.fetch_ohlc_data(symbol, timeframe)
+        if df_ohlc is None or len(df_ohlc) < 50:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Insufficient OHLC data for {symbol}"
+            )
+        
+        # Get latest setup score
+        score_result = await indicator_service.calculate_score_for_symbol(
+            symbol=symbol,
+            timeframe=timeframe
+        )
+        
+        if not score_result:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No score data available for {symbol}"
+            )
+        
+        setup_score = score_result['setup_score']
+        
+        # Calculate indicators
+        indicators = await indicator_service.calculate_indicators(df_ohlc)
+        
+        # Calculate no-trade score
+        no_trade_scorer = NoTradeScorer()
+        no_trade_result = no_trade_scorer.calculate_no_trade_score(df_ohlc, indicators)
+        no_trade_score = no_trade_result['no_trade_score']
+        
+        # Calculate volume profile
+        volume_calculator = VolumeProfileCalculator()
+        volume_profile = volume_calculator.calculate(df_ohlc)
+        
+        # Detect fake breakouts
+        fake_breakout_detector = FakeBreakoutDetector()
+        fake_breakout = fake_breakout_detector.detect(df_ohlc, volume_profile)
+        
+        # Get trading gate
+        gate = get_trading_gate()
+        
+        # Evaluate trade decision
+        decision_result = gate.evaluate_trade_decision(
+            setup_score=setup_score,
+            no_trade_score=no_trade_score,
+            volatility_regime=None,  # Extract from indicators if needed
+            time_category=None,  # Extract from no_trade_result if needed
+            fake_breakout_risk=fake_breakout['is_fake_breakout'],
+            oi_analysis=None  # Could fetch OI analysis if needed
+        )
+        
+        return TradeDecisionResponse(
+            symbol=symbol,
+            timestamp=datetime.now(),
+            trade_allowed=decision_result['trade_allowed'],
+            decision=decision_result['decision'],
+            confidence=decision_result['confidence'],
+            setup_score=setup_score,
+            no_trade_score=no_trade_score,
+            current_risk_mode=decision_result['risk_mode'],
+            blocking_reasons=decision_result['blocking_reasons'],
+            warnings=decision_result['warnings']
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_trade_decision: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

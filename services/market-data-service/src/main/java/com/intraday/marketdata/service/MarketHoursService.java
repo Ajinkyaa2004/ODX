@@ -67,7 +67,6 @@ public class MarketHoursService {
     }
     
     private LocalDateTime calculateNextOpen(LocalDateTime now) {
-        ZoneId zoneId = ZoneId.of(marketConfig.getTimezone());
         LocalTime startTime = marketConfig.getStartTimeAsLocalTime();
         LocalDate today = now.toLocalDate();
         LocalDateTime nextOpen = LocalDateTime.of(today, startTime);

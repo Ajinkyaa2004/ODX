@@ -247,6 +247,130 @@ class IndicatorService:
     # Phase 2: Scoring Methods
     # ============================================================================
     
+    async def fetch_ohlc_data(
+        self,
+        symbol: str,
+        timeframe: str = "5m",
+        hours: int = 4
+    ):
+        """
+        Fetch and resample OHLC data for Phase 4 analysis
+        
+        Args:
+            symbol: Symbol to fetch (NIFTY or BANKNIFTY)
+            timeframe: Timeframe (5m or 15m)
+            hours: Hours of historical data to fetch
+            
+        Returns:
+            pandas DataFrame with OHLC data or None
+        """
+        try:
+            # Fetch historical data
+            snapshots = await self.get_market_snapshots(symbol, hours)
+            
+            if len(snapshots) < 50:
+                logger.warning(f"Insufficient data for {symbol}: {len(snapshots)} snapshots")
+                return None
+            
+            # Prepare data for resampling
+            data = []
+            for snap in snapshots:
+                if 'ohlc1m' in snap and snap['ohlc1m']:
+                    ohlc = snap['ohlc1m']
+                    data.append({
+                        'timestamp': snap['timestamp'],
+                        'open': float(ohlc.get('open', 0)),
+                        'high': float(ohlc.get('high', 0)),
+                        'low': float(ohlc.get('low', 0)),
+                        'close': float(ohlc.get('close', 0)),
+                        'volume': int(ohlc.get('volume', 0))
+                    })
+            
+            if len(data) < 50:
+                logger.warning(f"Insufficient OHLC data for {symbol}")
+                return None
+            
+            # Resample to target timeframe
+            resampled = self.calculator.resample_to_timeframe(data, timeframe)
+            
+            if resampled.empty or len(resampled) < 50:
+                logger.warning(f"Insufficient resampled data for {symbol}")
+                return None
+            
+            return resampled
+            
+        except Exception as e:
+            logger.error(f"Error fetching OHLC data for {symbol}: {e}")
+            return None
+    
+    async def calculate_indicators(self, df_ohlc):
+        """
+        Calculate all indicators from OHLC DataFrame for Phase 4
+        
+        Args:
+            df_ohlc: pandas DataFrame with OHLC data
+            
+        Returns:
+            Dict with calculated indicators
+        """
+        try:
+            # Calculate EMAs
+            close_prices = df_ohlc['close'].tolist()
+            emas = self.calculator.calculate_all_emas(close_prices)
+            
+            # Detect EMA slope
+            ema9_slope = self.calculator.detect_ema_slope(close_prices[-20:], 5) if emas['ema9'] else "neutral"
+            
+            # Detect EMA alignment
+            alignment = self.calculator.detect_ema_alignment(
+                emas['ema9'], 
+                emas['ema20'], 
+                emas['ema50']
+            )
+            
+            # Calculate VWAP
+            typical_prices = []
+            volumes = []
+            
+            for _, row in df_ohlc.iterrows():
+                typical_price = self.calculator.calculate_typical_price(
+                    row['high'], 
+                    row['low'], 
+                    row['close']
+                )
+                typical_prices.append(typical_price)
+                volumes.append(int(row['volume']))
+            
+            vwap_value = self.calculator.calculate_vwap(typical_prices, volumes)
+            
+            # Get current price
+            current_price = float(df_ohlc['close'].iloc[-1])
+            
+            # Calculate VWAP position
+            vwap_position, vwap_distance = self.calculator.calculate_vwap_position(
+                current_price, 
+                vwap_value
+            )
+            
+            return {
+                'ema': {
+                    'ema9': emas['ema9'],
+                    'ema20': emas['ema20'],
+                    'ema50': emas['ema50'],
+                    'slope': ema9_slope,
+                    'alignment': alignment
+                },
+                'vwap': {
+                    'value': vwap_value,
+                    'position': vwap_position,
+                    'distance': vwap_distance
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error calculating indicators: {e}")
+            return None
+    
     async def fetch_oi_analysis(self, symbol: str) -> Optional[Dict]:
         """
         Fetch OI analysis from option-chain-service (Phase 3)
@@ -285,47 +409,61 @@ class IndicatorService:
             # Initialize scorer
             scorer = SetupScorer()
             
-            # Fetch recent market snapshots (last 4 hours)
-            market_data = await self.get_market_snapshots(
-                symbol=symbol,
-                hours=4 
-            )
+            # Fetch OHLC data for Phase 4
+            df_ohlc = await self.fetch_ohlc_data(symbol, timeframe, hours=4)
             
-            if not market_data:
-                logger.error(f"No market data available for {symbol}")
+            if df_ohlc is None or len(df_ohlc) < 50:
+                logger.error(f"Insufficient OHLC data for {symbol}")
                 return None
             
-            # Fetch latest indicators
-            indicators = await self.get_latest_indicators(symbol, timeframe)
+            # Calculate indicators
+            indicators = await self.calculate_indicators(df_ohlc)
             
             if not indicators:
-                logger.warning(f"No indicators available for {symbol}, calculating now...")
-                # Calculate indicators on-the-fly
-                indicator_result = await self.calculate_indicators_for_symbol(
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    hours=4
-                )
-                if not indicator_result:
-                    logger.error(f"Failed to calculate indicators for {symbol}")
-                    return None
+                logger.error(f"Failed to calculate indicators for {symbol}")
+                return None
             
             # Fetch OI analysis from Phase 3 service (if available)
             oi_analysis = await self.fetch_oi_analysis(symbol)
             
-            # Prepare data for scorer
-            score_data = {
-                'symbol': symbol,
-                'timeframe': timeframe,
-                'market_snapshots': market_data,
-                'indicators': indicators if indicators else indicator_result,
-                'oi_analysis': oi_analysis
-            }
+            # Extract data for scorer
+            current_price = float(df_ohlc['close'].iloc[-1])
+            price_history = df_ohlc['close'].tolist()
+            high_history = df_ohlc['high'].tolist()
+            low_history = df_ohlc['low'].tolist()
+            
+            # Get EMA data (for 5m timeframe)
+            ema_5m = indicators.get('ema')
+            ema_15m = None  # Could fetch 15m indicators if needed
+            
+            # Get VWAP data
+            vwap = indicators.get('vwap')
+            
+            # Get futures OI (from market data if available)
+            futures_oi = None
+            nifty_price = None
+            banknifty_price = None
             
             # Calculate score
-            result = scorer.calculate_setup_score(score_data)
+            result = scorer.calculate_setup_score(
+                symbol=symbol,
+                price=current_price,
+                ema_5m=ema_5m,
+                ema_15m=ema_15m,
+                vwap=vwap,
+                price_history=price_history,
+                high_history=high_history,
+                low_history=low_history,
+                df_ohlc=df_ohlc,  # Phase 4: For volatility calculation
+                futures_oi=futures_oi,
+                nifty_price=nifty_price,
+                banknifty_price=banknifty_price,
+                oi_analysis=oi_analysis  # Phase 3: OI Analysis
+            )
             
-            # Add timing information
+            # Add timing information and metadata
+            result['symbol'] = symbol
+            result['timeframe'] = timeframe
             result['evaluation_time_seconds'] = round(time.time() - start_time, 3)
             result['timestamp'] = datetime.utcnow()
             
@@ -340,7 +478,7 @@ class IndicatorService:
             return result
             
         except Exception as e:
-            logger.error(f"Error calculating score for {symbol}: {e}")
+            logger.error(f"Error calculating score for {symbol}: {e}", exc_info=True)
             return None
     
     async def store_score_data(self, score_data: Dict) -> None:

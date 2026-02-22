@@ -426,6 +426,109 @@ class InternalsScorer:
             return 5.0, {"error": str(e), "default": True}
 
 
+class VolatilityScorer:
+    """
+    Volatility Regime Scoring Module (10% weight) - PHASE 4
+    Analyzes ATR expansion/compression and volatility regime
+    """
+    
+    def __init__(self):
+        self.weight = 0.10
+        
+    def score(
+        self,
+        df: pd.DataFrame,
+        period: int = 14
+    ) -> Tuple[float, Dict]:
+        """
+        Calculate volatility score (0-10)
+        
+        Args:
+            df: DataFrame with OHLC data
+            period: ATR period (default 14)
+            
+        Returns:
+            Tuple of (score, details)
+        """
+        try:
+            score = 5.0  # Default neutral
+            details = {'regime': 'NORMAL'}
+            
+            if df is None or len(df) < period + 20:
+                logger.warning("Insufficient data for volatility scoring")
+                return 5.0, {"error": "Insufficient data", "regime": "UNKNOWN"}
+            
+            # Calculate ATR (14-period)
+            df = df.copy()
+            df['h_l'] = df['high'] - df['low']
+            df['h_pc'] = abs(df['high'] - df['close'].shift(1))
+            df['l_pc'] = abs(df['low'] - df['close'].shift(1))
+            df['tr'] = df[['h_l', 'h_pc', 'l_pc']].max(axis=1)
+            df['atr'] = df['tr'].rolling(window=period).mean()
+            
+            # Calculate 20-period average ATR
+            df['atr_ma'] = df['atr'].rolling(window=20).mean()
+            
+            # Get current values
+            current_atr = df['atr'].iloc[-1]
+            avg_atr = df['atr_ma'].iloc[-1]
+            
+            if pd.isna(current_atr) or pd.isna(avg_atr) or avg_atr == 0:
+                return 5.0, {"error": "Invalid ATR calculation", "regime": "UNKNOWN"}
+            
+            # Calculate ATR expansion percentage
+            atr_expansion = ((current_atr - avg_atr) / avg_atr) * 100
+            details['atr'] = round(current_atr, 2)
+            details['atr_avg'] = round(avg_atr, 2)
+            details['atr_expansion_pct'] = round(atr_expansion, 2)
+            
+            # Calculate current range vs 20-period average range
+            current_range = df['high'].iloc[-1] - df['low'].iloc[-1]
+            avg_range = (df['high'] - df['low']).rolling(window=20).mean().iloc[-1]
+            range_ratio = current_range / avg_range if avg_range > 0 else 1.0
+            details['range_ratio'] = round(range_ratio, 2)
+            
+            # Classify volatility regime and score
+            if atr_expansion < -20:  # Strong compression
+                score = 3.0
+                details['regime'] = 'COMPRESSION'
+                details['interpretation'] = 'Extreme compression - breakout likely but risky'
+            elif atr_expansion < -10:  # Moderate compression
+                score = 5.0
+                details['regime'] = 'COMPRESSION'
+                details['interpretation'] = 'Moderate compression'
+            elif atr_expansion < 10:  # Normal
+                score = 8.0
+                details['regime'] = 'NORMAL'
+                details['interpretation'] = 'Normal volatility - ideal for trading'
+            elif atr_expansion < 20:  # Moderate expansion
+                score = 7.0
+                details['regime'] = 'EXPANSION'
+                details['interpretation'] = 'Moderate expansion'
+            else:  # Strong expansion
+                score = 4.0
+                details['regime'] = 'EXPANSION'
+                details['interpretation'] = 'High volatility - risk increased'
+            
+            # Adjust score based on range ratio
+            if range_ratio > 1.5:
+                score -= 1.0
+                details['interpretation'] += ' | Wide range detected'
+            elif range_ratio < 0.5:
+                score -= 1.0
+                details['interpretation'] += ' | Narrow range detected'
+            
+            # Normalize to 0-10
+            normalized_score = min(10.0, max(0.0, score))
+            details['normalized_score'] = normalized_score
+            
+            return normalized_score, details
+            
+        except Exception as e:
+            logger.error(f"Error calculating volatility score: {e}", exc_info=True)
+            return 5.0, {"error": str(e), "regime": "UNKNOWN", "default": True}
+
+
 class OIConfirmationScorer:
     """
     OI Confirmation Scoring Module (20% weight) - PHASE 3
@@ -538,17 +641,18 @@ class SetupScorer:
         self.structure_scorer = StructureScorer()
         self.momentum_scorer = MomentumScorer()
         self.internals_scorer = InternalsScorer()
-        self.oi_scorer = OIConfirmationScorer()  # PHASE 3: Now active
+        self.volatility_scorer = VolatilityScorer()  # PHASE 4: Now active
+        self.oi_scorer = OIConfirmationScorer()  # PHASE 3: Active
         
-        # Phase 3 weights (OI now active, Volatility placeholder)
+        # Phase 4 weights (All components now active)
         self.weights = {
             'trend': 0.25,
             'vwap': 0.15,
             'structure': 0.15,
             'momentum': 0.10,
             'internals': 0.05,
-            'oi': 0.20,  # PHASE 3: NOW ACTIVE
-            'volatility': 0.10  # Placeholder for Phase 4
+            'volatility': 0.10,  # PHASE 4: NOW ACTIVE
+            'oi': 0.20  # PHASE 3: ACTIVE
         }
         
     def calculate_setup_score(
@@ -561,6 +665,7 @@ class SetupScorer:
         price_history: List[float],
         high_history: List[float],
         low_history: List[float],
+        df_ohlc: Optional[pd.DataFrame] = None,  # PHASE 4: For volatility calculation
         futures_oi: Optional[float] = None,
         nifty_price: Optional[float] = None,
         banknifty_price: Optional[float] = None,
@@ -590,6 +695,9 @@ class SetupScorer:
             preliminary_bias = self._determine_market_bias(
                 trend_details, vwap_details, structure_details, momentum_details
             )
+            
+            # PHASE 4: Calculate volatility score
+            volatility_score, volatility_details = self.volatility_scorer.score(df_ohlc)
             
             # PHASE 3: Calculate OI confirmation score
             oi_score, oi_details = self.oi_scorer.score(oi_analysis, preliminary_bias)
@@ -633,10 +741,10 @@ class SetupScorer:
                     'details': oi_details
                 },
                 'volatility': {
-                    'score': 5.0,  # Placeholder for Phase 4
+                    'score': round(volatility_score, 2),  # PHASE 4: Now active
                     'weight': self.weights['volatility'],
-                    'weighted': round(5.0 * self.weights['volatility'], 4),
-                    'details': {'status': 'placeholder_phase4'}
+                    'weighted': round(volatility_score * self.weights['volatility'], 4),
+                    'details': volatility_details
                 }
             }
             

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useSocketIO } from '@/hooks/useSocketIO';
-import { TrendingUp, TrendingDown, Activity, Wifi, WifiOff } from 'lucide-react';
+import { TrendingUp, TrendingDown, Activity, Wifi, WifiOff, BarChart3, LineChart } from 'lucide-react';
 import SetupScoreCard from '@/components/SetupScoreCard';
 import OptionChainPanel from '@/components/OptionChainPanel';
 import StrikeRecommendationCard from '@/components/StrikeRecommendationCard';
@@ -98,42 +98,62 @@ export default function DashboardPage() {
     const isPositive = priceData?.change >= 0;
 
     return (
-      <div className="bg-white rounded-lg shadow-lg p-6 border-l-4" 
-           style={{ borderLeftColor: isPositive ? '#10b981' : '#ef4444' }}>
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800">{symbol}</h2>
-            <p className="text-sm text-gray-500">
-              {priceData?.timestamp 
-                ? new Date(priceData.timestamp).toLocaleTimeString('en-IN')
-                : '--:--:--'}
-            </p>
+      <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-md border border-gray-200 p-8 hover:shadow-lg transition-shadow duration-200">
+        <div className="flex justify-between items-start mb-6">
+          <div className="flex items-center gap-4">
+            <div className={`p-3 rounded-xl ${
+              isPositive ? 'bg-green-50' : 'bg-red-50'
+            }`}>
+              {priceData && (
+                isPositive ? (
+                  <TrendingUp className="w-7 h-7 text-green-600" />
+                ) : (
+                  <TrendingDown className="w-7 h-7 text-red-600" />
+                )
+              )}
+            </div>
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900">{symbol}</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                {priceData?.timestamp 
+                  ? new Date(priceData.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                  : '--:--:--'}
+              </p>
+            </div>
           </div>
-          {priceData && (
-            isPositive ? (
-              <TrendingUp className="w-8 h-8 text-green-500" />
-            ) : (
-              <TrendingDown className="w-8 h-8 text-red-500" />
-            )
-          )}
         </div>
         
         {priceData ? (
           <>
-            <div className="text-4xl font-bold text-gray-900 mb-2">
+            <div className="text-5xl font-bold text-gray-900 mb-3">
               ₹{formatPrice(priceData.price)}
             </div>
-            <div className="flex gap-4 text-sm">
-              <span className={isPositive ? 'text-green-600' : 'text-red-600'}>
-                {formatChange(priceData.change)}
-              </span>
-              <span className={isPositive ? 'text-green-600' : 'text-red-600'}>
-                {formatPercent(priceData.changePercent)}
-              </span>
+            <div className="flex gap-6 items-center">
+              <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
+                isPositive ? 'bg-green-50' : 'bg-red-50'
+              }`}>
+                <span className={`text-lg font-semibold ${
+                  isPositive ? 'text-green-700' : 'text-red-700'
+                }`}>
+                  {formatChange(priceData.change)}
+                </span>
+              </div>
+              <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
+                isPositive ? 'bg-green-50' : 'bg-red-50'
+              }`}>
+                <span className={`text-lg font-semibold ${
+                  isPositive ? 'text-green-700' : 'text-red-700'
+                }`}>
+                  {formatPercent(priceData.changePercent)}
+                </span>
+              </div>
             </div>
           </>
         ) : (
-          <div className="text-2xl text-gray-400">Loading...</div>
+          <div className="animate-pulse">
+            <div className="h-12 bg-gray-200 rounded w-48 mb-3"></div>
+            <div className="h-8 bg-gray-200 rounded w-32"></div>
+          </div>
         )}
       </div>
     );
@@ -213,44 +233,55 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-white">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+      <header className="bg-gradient-to-r from-blue-600 to-blue-700 shadow-lg">
+        <div className="max-w-[1920px] mx-auto px-6 py-6">
           <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                ODX Live Dashboard
-              </h1>
-              <p className="text-sm text-gray-500 mt-1">
-                Real-time market data and indicators
-              </p>
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-white/10 rounded-xl">
+                <BarChart3 className="w-8 h-8 text-white" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-white">
+                  ODX Live Dashboard
+                </h1>
+                <p className="text-sm text-blue-100 mt-1">
+                  Real-time market data and trading intelligence
+                </p>
+              </div>
             </div>
             
-            {/* Connection Status */}
-            <div className="flex items-center gap-4">
-              <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-                connected ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+            {/* Status Indicators */}
+            <div className="flex items-center gap-3">
+              <div className={`flex items-center gap-2 px-4 py-2.5 rounded-lg backdrop-blur-sm ${
+                connected ? 'bg-green-500/20 border border-green-400/30' : 'bg-red-500/20 border border-red-400/30'
               }`}>
                 {connected ? (
                   <>
-                    <Wifi className="w-4 h-4" />
-                    <span className="text-sm font-medium">Connected</span>
+                    <Wifi className="w-5 h-5 text-green-100" />
+                    <span className="text-sm font-semibold text-green-100">Connected</span>
                   </>
                 ) : (
                   <>
-                    <WifiOff className="w-4 h-4" />
-                    <span className="text-sm font-medium">Disconnected</span>
+                    <WifiOff className="w-5 h-5 text-red-100" />
+                    <span className="text-sm font-semibold text-red-100">Disconnected</span>
                   </>
                 )}
               </div>
               
               {/* Market Status */}
-              <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-                marketStatus.isOpen ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-700'
+              <div className={`flex items-center gap-2 px-4 py-2.5 rounded-lg backdrop-blur-sm ${
+                marketStatus.isOpen 
+                  ? 'bg-emerald-500/20 border border-emerald-400/30' 
+                  : 'bg-gray-500/20 border border-gray-400/30'
               }`}>
-                <Activity className="w-4 h-4" />
-                <span className="text-sm font-medium">
+                <Activity className={`w-5 h-5 ${
+                  marketStatus.isOpen ? 'text-emerald-100' : 'text-gray-300'
+                }`} />
+                <span className={`text-sm font-semibold ${
+                  marketStatus.isOpen ? 'text-emerald-100' : 'text-gray-300'
+                }`}>
                   {marketStatus.isOpen ? 'Market Open' : 'Market Closed'}
                 </span>
               </div>
@@ -260,15 +291,21 @@ export default function DashboardPage() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-[1920px] mx-auto px-4 py-8">
+      <main className="max-w-[1920px] mx-auto px-6 py-8 bg-gray-50">
         {/* NIFTY Section */}
         <section className="mb-12">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-3">
-            <span>NIFTY</span>
-            <span className="text-sm font-normal text-gray-500">
-              Complete Analysis Dashboard
-            </span>
-          </h2>
+          <div className="flex items-center gap-4 mb-8">
+            <div className="h-12 w-1 bg-gradient-to-b from-blue-600 to-blue-400 rounded-full"></div>
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+                <LineChart className="w-8 h-8 text-blue-600" />
+                <span>NIFTY 50</span>
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Complete technical analysis and options intelligence
+              </p>
+            </div>
+          </div>
           
           {/* Price Ticker */}
           <div className="mb-6">
@@ -296,49 +333,113 @@ export default function DashboardPage() {
             <StrikeRecommendationCard symbol="NIFTY" />
           </div>
 
-          {/* Phase 1: Legacy Indicators (keep for reference) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-white rounded-lg shadow p-4">
-              <h3 className="font-semibold text-gray-700 mb-2">Phase 1 Indicators (5m)</h3>
+          {/* Technical Indicators */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-900">5-Minute Timeframe</h3>
+                <span className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full">5M</span>
+              </div>
               {indicators.NIFTY?.['5m'] ? (
-                <div className="space-y-1 text-sm text-gray-600">
-                  <div>EMA9: ₹{formatPrice(indicators.NIFTY['5m'].ema.ema9)}</div>
-                  <div>VWAP: ₹{formatPrice(indicators.NIFTY['5m'].vwap.value)}</div>
-                  <div className="text-xs text-gray-500 mt-2">
-                    {indicators.NIFTY['5m'].ema.alignment} • {indicators.NIFTY['5m'].ema.slope}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-sm text-gray-600">EMA 9</span>
+                    <span className="font-semibold text-gray-900">₹{formatPrice(indicators.NIFTY['5m'].ema.ema9)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-sm text-gray-600">VWAP</span>
+                    <span className="font-semibold text-gray-900">₹{formatPrice(indicators.NIFTY['5m'].vwap.value)}</span>
+                  </div>
+                  <div className="flex gap-2 mt-4">
+                    <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${
+                      indicators.NIFTY['5m'].ema.alignment === 'bullish' 
+                        ? 'bg-green-100 text-green-700' 
+                        : indicators.NIFTY['5m'].ema.alignment === 'bearish'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {indicators.NIFTY['5m'].ema.alignment.toUpperCase()}
+                    </span>
+                    <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${
+                      indicators.NIFTY['5m'].ema.slope === 'bullish' 
+                        ? 'bg-green-100 text-green-700' 
+                        : indicators.NIFTY['5m'].ema.slope === 'bearish'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {indicators.NIFTY['5m'].ema.slope.toUpperCase()} SLOPE
+                    </span>
                   </div>
                 </div>
               ) : (
-                <div className="text-sm text-gray-400">Loading...</div>
+                <div className="animate-pulse space-y-3">
+                  <div className="h-10 bg-gray-200 rounded"></div>
+                  <div className="h-10 bg-gray-200 rounded"></div>
+                </div>
               )}
             </div>
-            <div className="bg-white rounded-lg shadow p-4">
-              <h3 className="font-semibold text-gray-700 mb-2">Phase 1 Indicators (15m)</h3>
+            <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-900">15-Minute Timeframe</h3>
+                <span className="px-3 py-1 bg-purple-50 text-purple-700 text-xs font-semibold rounded-full">15M</span>
+              </div>
               {indicators.NIFTY?.['15m'] ? (
-                <div className="space-y-1 text-sm text-gray-600">
-                  <div>EMA9: ₹{formatPrice(indicators.NIFTY['15m'].ema.ema9)}</div>
-                  <div>VWAP: ₹{formatPrice(indicators.NIFTY['15m'].vwap.value)}</div>
-                  <div className="text-xs text-gray-500 mt-2">
-                    {indicators.NIFTY['15m'].ema.alignment} • {indicators.NIFTY['15m'].ema.slope}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-sm text-gray-600">EMA 9</span>
+                    <span className="font-semibold text-gray-900">₹{formatPrice(indicators.NIFTY['15m'].ema.ema9)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-sm text-gray-600">VWAP</span>
+                    <span className="font-semibold text-gray-900">₹{formatPrice(indicators.NIFTY['15m'].vwap.value)}</span>
+                  </div>
+                  <div className="flex gap-2 mt-4">
+                    <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${
+                      indicators.NIFTY['15m'].ema.alignment === 'bullish' 
+                        ? 'bg-green-100 text-green-700' 
+                        : indicators.NIFTY['15m'].ema.alignment === 'bearish'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {indicators.NIFTY['15m'].ema.alignment.toUpperCase()}
+                    </span>
+                    <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${
+                      indicators.NIFTY['15m'].ema.slope === 'bullish' 
+                        ? 'bg-green-100 text-green-700' 
+                        : indicators.NIFTY['15m'].ema.slope === 'bearish'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {indicators.NIFTY['15m'].ema.slope.toUpperCase()} SLOPE
+                    </span>
                   </div>
                 </div>
               ) : (
-                <div className="text-sm text-gray-400">Loading...</div>
+                <div className="animate-pulse space-y-3">
+                  <div className="h-10 bg-gray-200 rounded"></div>
+                  <div className="h-10 bg-gray-200 rounded"></div>
+                </div>
               )}
             </div>
           </div>
         </section>
 
-        <hr className="my-12 border-gray-300" />
+        <div className="my-12 border-t-2 border-gray-200"></div>
 
         {/* BANKNIFTY Section */}
         <section>
-          <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-3">
-            <span>BANKNIFTY</span>
-            <span className="text-sm font-normal text-gray-500">
-              Complete Analysis Dashboard
-            </span>
-          </h2>
+          <div className="flex items-center gap-4 mb-8">
+            <div className="h-12 w-1 bg-gradient-to-b from-indigo-600 to-indigo-400 rounded-full"></div>
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+                <LineChart className="w-8 h-8 text-indigo-600" />
+                <span>BANKNIFTY</span>
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Complete technical analysis and options intelligence
+              </p>
+            </div>
+          </div>
           
           {/* Price Ticker */}
           <div className="mb-6">
@@ -366,64 +467,136 @@ export default function DashboardPage() {
             <StrikeRecommendationCard symbol="BANKNIFTY" />
           </div>
 
-          {/* Phase 1: Legacy Indicators (keep for reference) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-white rounded-lg shadow p-4">
-              <h3 className="font-semibold text-gray-700 mb-2">Phase 1 Indicators (5m)</h3>
+          {/* Technical Indicators */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-900">5-Minute Timeframe</h3>
+                <span className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full">5M</span>
+              </div>
               {indicators.BANKNIFTY?.['5m'] ? (
-                <div className="space-y-1 text-sm text-gray-600">
-                  <div>EMA9: ₹{formatPrice(indicators.BANKNIFTY['5m'].ema.ema9)}</div>
-                  <div>VWAP: ₹{formatPrice(indicators.BANKNIFTY['5m'].vwap.value)}</div>
-                  <div className="text-xs text-gray-500 mt-2">
-                    {indicators.BANKNIFTY['5m'].ema.alignment} • {indicators.BANKNIFTY['5m'].ema.slope}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-sm text-gray-600">EMA 9</span>
+                    <span className="font-semibold text-gray-900">₹{formatPrice(indicators.BANKNIFTY['5m'].ema.ema9)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-sm text-gray-600">VWAP</span>
+                    <span className="font-semibold text-gray-900">₹{formatPrice(indicators.BANKNIFTY['5m'].vwap.value)}</span>
+                  </div>
+                  <div className="flex gap-2 mt-4">
+                    <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${
+                      indicators.BANKNIFTY['5m'].ema.alignment === 'bullish' 
+                        ? 'bg-green-100 text-green-700' 
+                        : indicators.BANKNIFTY['5m'].ema.alignment === 'bearish'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {indicators.BANKNIFTY['5m'].ema.alignment.toUpperCase()}
+                    </span>
+                    <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${
+                      indicators.BANKNIFTY['5m'].ema.slope === 'bullish' 
+                        ? 'bg-green-100 text-green-700' 
+                        : indicators.BANKNIFTY['5m'].ema.slope === 'bearish'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {indicators.BANKNIFTY['5m'].ema.slope.toUpperCase()} SLOPE
+                    </span>
                   </div>
                 </div>
               ) : (
-                <div className="text-sm text-gray-400">Loading...</div>
+                <div className="animate-pulse space-y-3">
+                  <div className="h-10 bg-gray-200 rounded"></div>
+                  <div className="h-10 bg-gray-200 rounded"></div>
+                </div>
               )}
             </div>
-            <div className="bg-white rounded-lg shadow p-4">
-              <h3 className="font-semibold text-gray-700 mb-2">Phase 1 Indicators (15m)</h3>
+            <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-900">15-Minute Timeframe</h3>
+                <span className="px-3 py-1 bg-purple-50 text-purple-700 text-xs font-semibold rounded-full">15M</span>
+              </div>
               {indicators.BANKNIFTY?.['15m'] ? (
-                <div className="space-y-1 text-sm text-gray-600">
-                  <div>EMA9: ₹{formatPrice(indicators.BANKNIFTY['15m'].ema.ema9)}</div>
-                  <div>VWAP: ₹{formatPrice(indicators.BANKNIFTY['15m'].vwap.value)}</div>
-                  <div className="text-xs text-gray-500 mt-2">
-                    {indicators.BANKNIFTY['15m'].ema.alignment} • {indicators.BANKNIFTY['15m'].ema.slope}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-sm text-gray-600">EMA 9</span>
+                    <span className="font-semibold text-gray-900">₹{formatPrice(indicators.BANKNIFTY['15m'].ema.ema9)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-sm text-gray-600">VWAP</span>
+                    <span className="font-semibold text-gray-900">₹{formatPrice(indicators.BANKNIFTY['15m'].vwap.value)}</span>
+                  </div>
+                  <div className="flex gap-2 mt-4">
+                    <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${
+                      indicators.BANKNIFTY['15m'].ema.alignment === 'bullish' 
+                        ? 'bg-green-100 text-green-700' 
+                        : indicators.BANKNIFTY['15m'].ema.alignment === 'bearish'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {indicators.BANKNIFTY['15m'].ema.alignment.toUpperCase()}
+                    </span>
+                    <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${
+                      indicators.BANKNIFTY['15m'].ema.slope === 'bullish' 
+                        ? 'bg-green-100 text-green-700' 
+                        : indicators.BANKNIFTY['15m'].ema.slope === 'bearish'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {indicators.BANKNIFTY['15m'].ema.slope.toUpperCase()} SLOPE
+                    </span>
                   </div>
                 </div>
               ) : (
-                <div className="text-sm text-gray-400">Loading...</div>
+                <div className="animate-pulse space-y-3">
+                  <div className="h-10 bg-gray-200 rounded"></div>
+                  <div className="h-10 bg-gray-200 rounded"></div>
+                </div>
               )}
             </div>
           </div>
         </section>
 
         {/* Info Footer */}
-        <div className="mt-12 text-center text-sm text-gray-500 bg-white rounded-lg shadow p-6">
-          <p className="font-semibold text-gray-700 mb-2">✅ Implementation Status</p>
-          <div className="flex justify-center gap-8 mt-4">
-            <div>
-              <span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-2"></span>
-              <span>Phase 0: Infrastructure</span>
+        <div className="mt-16 p-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-100 shadow-sm">
+          <div className="text-center mb-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Platform Features</h3>
+            <p className="text-sm text-gray-600">Complete trading intelligence platform</p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="text-center">
+              <div className="w-12 h-12 bg-green-500 rounded-xl mx-auto mb-3 flex items-center justify-center">
+                <Activity className="w-6 h-6 text-white" />
+              </div>
+              <p className="font-semibold text-gray-900 text-sm">Live Market Data</p>
+              <p className="text-xs text-gray-500 mt-1">Real-time prices</p>
             </div>
-            <div>
-              <span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-2"></span>
-              <span>Phase 1: Market Data + Indicators</span>
+            <div className="text-center">
+              <div className="w-12 h-12 bg-blue-500 rounded-xl mx-auto mb-3 flex items-center justify-center">
+                <TrendingUp className="w-6 h-6 text-white" />
+              </div>
+              <p className="font-semibold text-gray-900 text-sm">Technical Analysis</p>
+              <p className="text-xs text-gray-500 mt-1">EMA, VWAP, RSI</p>
             </div>
-            <div>
-              <span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-2"></span>
-              <span>Phase 2: Scoring Engine</span>
+            <div className="text-center">
+              <div className="w-12 h-12 bg-purple-500 rounded-xl mx-auto mb-3 flex items-center justify-center">
+                <BarChart3 className="w-6 h-6 text-white" />
+              </div>
+              <p className="font-semibold text-gray-900 text-sm">Setup Scoring</p>
+              <p className="text-xs text-gray-500 mt-1">0-10 rating system</p>
             </div>
-            <div>
-              <span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-2"></span>
-              <span>Phase 3: Option Chain Intelligence</span>
+            <div className="text-center">
+              <div className="w-12 h-12 bg-indigo-500 rounded-xl mx-auto mb-3 flex items-center justify-center">
+                <LineChart className="w-6 h-6 text-white" />
+              </div>
+              <p className="font-semibold text-gray-900 text-sm">Options Intelligence</p>
+              <p className="text-xs text-gray-500 mt-1">OI analysis & strikes</p>
             </div>
           </div>
-          <p className="mt-4 text-xs">
-            Data updates every 3 minutes • Live prices via Socket.io • 
-            Scoring: Trend, VWAP, Structure, Momentum, Internals, OI Confirmation
-          </p>
+          <div className="mt-8 pt-6 border-t border-blue-200 text-center text-xs text-gray-600">
+            <p>Data updates every 3 minutes • Live prices via Socket.io • WebSocket connectivity for real-time streaming</p>
+          </div>
         </div>
       </main>
     </div>

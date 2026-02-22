@@ -4,6 +4,9 @@ import com.intraday.marketdata.model.*;
 import com.intraday.marketdata.repository.MarketSnapshotRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -11,7 +14,6 @@ import reactor.core.publisher.Mono;
 import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,7 +45,7 @@ public class MarketDataService {
             MarketSnapshotRepository snapshotRepository,
             MarketHoursService marketHoursService,
             SocketIOService socketIOService,
-            FyersWebSocketClient fyersWebSocketClient) {
+            @Lazy FyersWebSocketClient fyersWebSocketClient) {
         this.snapshotRepository = snapshotRepository;
         this.marketHoursService = marketHoursService;
         this.socketIOService = socketIOService;
@@ -54,8 +56,11 @@ public class MarketDataService {
     public void initialize() {
         this.symbols = Arrays.asList(symbolsString.split(","));
         log.info("Market Data Service initialized for symbols: {}", symbols);
-        
-        // Connect to FYERS WebSocket
+    }
+    
+    @EventListener(ApplicationReadyEvent.class)
+    public void onApplicationReady() {
+        log.info("Application ready, connecting to FYERS WebSocket");
         connectToFyers();
     }
     
