@@ -10,6 +10,10 @@ import OIAnalysisPanel from '@/components/OIAnalysisPanel';
 import RiskCalculatorPanel from '@/components/RiskCalculatorPanel';
 import PnLSimulator from '@/components/PnLSimulator';
 import { AIReasoningPanel } from '@/components/AIReasoningPanel';
+import { GlobalNavbar } from '@/components/GlobalNavbar';
+import { SettingsPanel, useSettings } from '@/components/SettingsPanel';
+import { AlertManager } from '@/components/AlertManager';
+import { HelpModal } from '@/components/HelpModal';
 
 interface Indicator {
   ema: {
@@ -31,9 +35,12 @@ export default function DashboardPage() {
   const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
   
   const { connected, prices, marketStatus, subscribe } = useSocketIO(socketUrl);
+  const settings = useSettings();
   
   const [indicators, setIndicators] = useState<Record<string, Record<string, Indicator>>>({});
   const [loading, setLoading] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
     // Subscribe to NIFTY and BANKNIFTY
@@ -101,23 +108,23 @@ export default function DashboardPage() {
     const isPositive = priceData?.change >= 0;
 
     return (
-      <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-md border border-gray-200 p-8 hover:shadow-lg transition-shadow duration-200">
+      <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-8 hover:shadow-lg transition-shadow duration-200">
         <div className="flex justify-between items-start mb-6">
           <div className="flex items-center gap-4">
             <div className={`p-3 rounded-xl ${
-              isPositive ? 'bg-green-50' : 'bg-red-50'
+              isPositive ? 'bg-green-50 dark:bg-green-900' : 'bg-red-50 dark:bg-red-900'
             }`}>
               {priceData && (
                 isPositive ? (
-                  <TrendingUp className="w-7 h-7 text-green-600" />
+                  <TrendingUp className="w-7 h-7 text-green-600 dark:text-green-400" />
                 ) : (
-                  <TrendingDown className="w-7 h-7 text-red-600" />
+                  <TrendingDown className="w-7 h-7 text-red-600 dark:text-red-400" />
                 )
               )}
             </div>
             <div>
-              <h2 className="text-3xl font-bold text-gray-900">{symbol}</h2>
-              <p className="text-sm text-gray-500 mt-1">
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-white">{symbol}</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 {priceData?.timestamp 
                   ? new Date(priceData.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
                   : '--:--:--'}
@@ -128,24 +135,24 @@ export default function DashboardPage() {
         
         {priceData ? (
           <>
-            <div className="text-5xl font-bold text-gray-900 mb-3">
+            <div className="text-5xl font-bold text-gray-900 dark:text-white mb-3">
               ₹{formatPrice(priceData.price)}
             </div>
             <div className="flex gap-6 items-center">
               <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
-                isPositive ? 'bg-green-50' : 'bg-red-50'
+                isPositive ? 'bg-green-50 dark:bg-green-900' : 'bg-red-50 dark:bg-red-900'
               }`}>
                 <span className={`text-lg font-semibold ${
-                  isPositive ? 'text-green-700' : 'text-red-700'
+                  isPositive ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
                 }`}>
                   {formatChange(priceData.change)}
                 </span>
               </div>
               <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
-                isPositive ? 'bg-green-50' : 'bg-red-50'
+                isPositive ? 'bg-green-50 dark:bg-green-900' : 'bg-red-50 dark:bg-red-900'
               }`}>
                 <span className={`text-lg font-semibold ${
-                  isPositive ? 'text-green-700' : 'text-red-700'
+                  isPositive ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
                 }`}>
                   {formatPercent(priceData.changePercent)}
                 </span>
@@ -154,8 +161,8 @@ export default function DashboardPage() {
           </>
         ) : (
           <div className="animate-pulse">
-            <div className="h-12 bg-gray-200 rounded w-48 mb-3"></div>
-            <div className="h-8 bg-gray-200 rounded w-32"></div>
+            <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded w-48 mb-3"></div>
+            <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-32"></div>
           </div>
         )}
       </div>
@@ -236,75 +243,70 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-blue-600 to-blue-700 shadow-lg">
-        <div className="max-w-[1920px] mx-auto px-6 py-6">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-white/10 rounded-xl">
-                <BarChart3 className="w-8 h-8 text-white" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold text-white">
-                  ODX Live Dashboard
-                </h1>
-                <p className="text-sm text-blue-100 mt-1">
-                  Real-time market data and trading intelligence
-                </p>
-              </div>
-            </div>
-            
-            {/* Status Indicators */}
-            <div className="flex items-center gap-3">
-              <div className={`flex items-center gap-2 px-4 py-2.5 rounded-lg backdrop-blur-sm ${
-                connected ? 'bg-green-500/20 border border-green-400/30' : 'bg-red-500/20 border border-red-400/30'
-              }`}>
-                {connected ? (
-                  <>
-                    <Wifi className="w-5 h-5 text-green-100" />
-                    <span className="text-sm font-semibold text-green-100">Connected</span>
-                  </>
-                ) : (
-                  <>
-                    <WifiOff className="w-5 h-5 text-red-100" />
-                    <span className="text-sm font-semibold text-red-100">Disconnected</span>
-                  </>
-                )}
-              </div>
-              
-              {/* Market Status */}
-              <div className={`flex items-center gap-2 px-4 py-2.5 rounded-lg backdrop-blur-sm ${
-                marketStatus.isOpen 
-                  ? 'bg-emerald-500/20 border border-emerald-400/30' 
-                  : 'bg-gray-500/20 border border-gray-400/30'
-              }`}>
-                <Activity className={`w-5 h-5 ${
-                  marketStatus.isOpen ? 'text-emerald-100' : 'text-gray-300'
-                }`} />
-                <span className={`text-sm font-semibold ${
-                  marketStatus.isOpen ? 'text-emerald-100' : 'text-gray-300'
-                }`}>
-                  {marketStatus.isOpen ? 'Market Open' : 'Market Closed'}
-                </span>
-              </div>
-            </div>
+    <div className="min-h-screen bg-white dark:bg-gray-900">
+      {/* Global Navbar */}
+      <GlobalNavbar 
+        onSettingsClick={() => setSettingsOpen(true)}
+        onHelpClick={() => setHelpOpen(true)}
+      />
+      
+      {/* Settings Panel */}
+      <SettingsPanel isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      
+      {/* Help Modal */}
+      <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
+      
+      {/* Alert Manager */}
+      <AlertManager settings={settings} />
+      
+      {/* Connection & Market Status Bar */}
+      <div className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3">
+        <div className="max-w-[1920px] mx-auto flex items-center gap-4">
+          <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
+            connected ? 'bg-green-100 dark:bg-green-900' : 'bg-red-100 dark:bg-red-900'
+          }`}>
+            {connected ? (
+              <>
+                <Wifi className="w-4 h-4 text-green-600 dark:text-green-400" />
+                <span className="text-sm font-semibold text-green-600 dark:text-green-400">Connected</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-4 h-4 text-red-600 dark:text-red-400" />
+                <span className="text-sm font-semibold text-red-600 dark:text-red-400">Disconnected</span>
+              </>
+            )}
+          </div>
+          
+          <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
+            marketStatus.isOpen 
+              ? 'bg-emerald-100 dark:bg-emerald-900' 
+              : 'bg-gray-200 dark:bg-gray-700'
+          }`}>
+            <Activity className={`w-4 h-4 ${
+              marketStatus.isOpen ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-600 dark:text-gray-400'
+            }`} />
+            <span className={`text-sm font-semibold ${
+              marketStatus.isOpen ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-600 dark:text-gray-400'
+            }`}>
+              {marketStatus.isOpen ? 'Market Open' : 'Market Closed'}
+            </span>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Main Content */}
-      <main className="max-w-[1920px] mx-auto px-6 py-8 bg-gray-50">
+      <main className="max-w-[1920px] mx-auto px-6 py-8 bg-gray-50 dark:bg-gray-900">
         {/* NIFTY Section */}
         <section className="mb-12">
           <div className="flex items-center gap-4 mb-8">
             <div className="h-12 w-1 bg-gradient-to-b from-blue-600 to-blue-400 rounded-full"></div>
             <div>
-              <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                <LineChart className="w-8 h-8 text-blue-600" />
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                <LineChart className="w-8 h-8 text-blue-600 dark:text-blue-400" />
                 <span>NIFTY 50</span>
               </h2>
-              <p className="text-sm text-gray-600 mt-1">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                 Complete technical analysis and options intelligence
               </p>
             </div>
@@ -471,11 +473,11 @@ export default function DashboardPage() {
           <div className="flex items-center gap-4 mb-8">
             <div className="h-12 w-1 bg-gradient-to-b from-indigo-600 to-indigo-400 rounded-full"></div>
             <div>
-              <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                <LineChart className="w-8 h-8 text-indigo-600" />
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                <LineChart className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
                 <span>BANKNIFTY</span>
               </h2>
-              <p className="text-sm text-gray-600 mt-1">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                 Complete technical analysis and options intelligence
               </p>
             </div>

@@ -25,6 +25,28 @@
     --ring: 217 91% 60%;
     --radius: 0.75rem;
   }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 217 91% 60%;
+  }
 }
 
 @layer base {
@@ -33,7 +55,7 @@
   }
   
   body {
-    @apply bg-white text-foreground antialiased;
+    @apply bg-white dark:bg-gray-900 text-foreground antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
@@ -44,22 +66,22 @@
   }
 
   ::-webkit-scrollbar-track {
-    @apply bg-gray-100;
+    @apply bg-gray-100 dark:bg-gray-800;
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply bg-gray-300 rounded-full;
+    @apply bg-gray-300 dark:bg-gray-600 rounded-full;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-gray-400;
+    @apply bg-gray-400 dark:bg-gray-500;
   }
 }
 
 @layer components {
   /* Premium card style */
   .premium-card {
-    @apply bg-white rounded-xl shadow-md border border-gray-200 hover:shadow-lg transition-all duration-200;
+    @apply bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-all duration-200;
   }
 
   /* Gradient backgrounds */
@@ -81,18 +103,34 @@
 
   /* Badge styles */
   .badge-success {
-    @apply px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold;
+    @apply px-3 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-full text-xs font-semibold;
   }
 
   .badge-danger {
-    @apply px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold;
+    @apply px-3 py-1 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-full text-xs font-semibold;
   }
 
   .badge-warning {
-    @apply px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-semibold;
+    @apply px-3 py-1 bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 rounded-full text-xs font-semibold;
   }
 
   .badge-info {
-    @apply px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold;
+    @apply px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full text-xs font-semibold;
+  }
+
+  /* Alert animations */
+  @keyframes slide-in {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  .animate-slide-in {
+    animation: slide-in 0.3s ease-out;
   }
 }

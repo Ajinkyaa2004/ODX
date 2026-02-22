@@ -53,4 +53,25 @@ public class MarketDataController {
         log.info("Fetching market status");
         return Mono.just(marketHoursService.getMarketStatus());
     }
+    
+    /**
+     * Get global market indices
+     * Returns major global indices like S&P 500, Nasdaq, Dow, Nikkei, Hang Seng, India VIX
+     */
+    @GetMapping(value = "/global-indices", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Mono<Map<String, Object>> getGlobalIndices() {
+        log.info("Fetching global indices");
+        // Return mock data for now - can be replaced with real API integration later
+        return Mono.just(Map.of(
+            "indices", java.util.List.of(
+                Map.of("name", "S&P 500", "symbol", "SPX", "value", 5850.23, "change", 45.12, "changePercent", 0.78),
+                Map.of("name", "Nasdaq", "symbol", "NDX", "value", 18432.65, "change", -23.45, "changePercent", -0.13),
+                Map.of("name", "Dow", "symbol", "DJI", "value", 42156.78, "change", 123.45, "changePercent", 0.29),
+                Map.of("name", "Nikkei", "symbol", "N225", "value", 38245.12, "change", 89.34, "changePercent", 0.23),
+                Map.of("name", "Hang Seng", "symbol", "HSI", "value", 20123.45, "change", -156.78, "changePercent", -0.77),
+                Map.of("name", "India VIX", "symbol", "INDIAVIX", "value", 14.25, "change", 0.45, "changePercent", 3.26)
+            ),
+            "timestamp", System.currentTimeMillis()
+        ));
+    }
 }
