@@ -7,6 +7,8 @@ import SetupScoreCard from '@/components/SetupScoreCard';
 import OptionChainPanel from '@/components/OptionChainPanel';
 import StrikeRecommendationCard from '@/components/StrikeRecommendationCard';
 import OIAnalysisPanel from '@/components/OIAnalysisPanel';
+import RiskCalculatorPanel from '@/components/RiskCalculatorPanel';
+import PnLSimulator from '@/components/PnLSimulator';
 
 interface Indicator {
   ema: {
@@ -333,6 +335,12 @@ export default function DashboardPage() {
             <StrikeRecommendationCard symbol="NIFTY" />
           </div>
 
+          {/* Phase 5: Risk Calculator & PnL Simulator */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <RiskCalculatorPanel symbol="NIFTY" currentPrice={prices.NIFTY?.price || 0} />
+            <PnLSimulator symbol="NIFTY" currentPrice={prices.NIFTY?.price || 0} />
+          </div>
+
           {/* Technical Indicators */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
@@ -465,6 +473,12 @@ export default function DashboardPage() {
           {/* Phase 3: Strike Recommendations */}
           <div className="mb-6">
             <StrikeRecommendationCard symbol="BANKNIFTY" />
+          </div>
+
+          {/* Phase 5: Risk Calculator & PnL Simulator */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <RiskCalculatorPanel symbol="BANKNIFTY" currentPrice={prices.BANKNIFTY?.price || 0} />
+            <PnLSimulator symbol="BANKNIFTY" currentPrice={prices.BANKNIFTY?.price || 0} />
           </div>
 
           {/* Technical Indicators */}
