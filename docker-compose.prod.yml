@@ -1,0 +1,164 @@
+version: '3.8'
+
+services:
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    container_name: odx-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=production
+      - MONGODB_URI=${MONGODB_URI}
+      - MARKET_DATA_SERVICE_URL=http://market-data-service:8081
+      - OPTION_CHAIN_SERVICE_URL=http://option-chain-service:8082
+      - RISK_SERVICE_URL=http://risk-service:8083
+      - JOURNAL_SERVICE_URL=http://journal-service:8084
+      - QUANT_ENGINE_URL=http://quant-engine:8001
+      - AI_REASONING_SERVICE_URL=http://ai-reasoning-service:8002
+    depends_on:
+      - market-data-service
+      - option-chain-service
+      - risk-service
+      - journal-service
+      - quant-engine
+      - ai-reasoning-service
+    restart: always
+    networks:
+      - odx-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  market-data-service:
+    build:
+      context: ./services/market-data-service
+      dockerfile: Dockerfile
+    container_name: odx-market-data
+    ports:
+      - "8081:8081"
+      - "9092:9092"
+    environment:
+      - SPRING_PROFILES_ACTIVE=production
+      - MONGODB_URI=${MONGODB_URI}
+      - FYERS_APP_ID=${FYERS_APP_ID}
+      - FYERS_ACCESS_TOKEN=${FYERS_ACCESS_TOKEN}
+      - MARKET_START_TIME=${MARKET_START_TIME:-09:15}
+      - MARKET_END_TIME=${MARKET_END_TIME:-15:30}
+    restart: always
+    networks:
+      - odx-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  option-chain-service:
+    build:
+      context: ./services/option-chain-service
+      dockerfile: Dockerfile
+    container_name: odx-option-chain
+    ports:
+      - "8082:8082"
+      - "9093:9093"
+    environment:
+      - SPRING_PROFILES_ACTIVE=production
+      - MONGODB_URI=${MONGODB_URI}
+      - FYERS_APP_ID=${FYERS_APP_ID}
+      - FYERS_ACCESS_TOKEN=${FYERS_ACCESS_TOKEN}
+    restart: always
+    networks:
+      - odx-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  risk-service:
+    build:
+      context: ./services/risk-service
+      dockerfile: Dockerfile
+    container_name: odx-risk
+    ports:
+      - "8083:8083"
+    environment:
+      - SPRING_PROFILES_ACTIVE=production
+      - MONGODB_URI=${MONGODB_URI}
+    restart: always
+    networks:
+      - odx-network
+
+  journal-service:
+    build:
+      context: ./services/journal-service
+      dockerfile: Dockerfile
+    container_name: odx-journal
+    ports:
+      - "8084:8084"
+    environment:
+      - SPRING_PROFILES_ACTIVE=production
+      - MONGODB_URI=${MONGODB_URI}
+    restart: always
+    networks:
+      - odx-network
+
+  quant-engine:
+    build:
+      context: ./services/quant-engine
+      dockerfile: Dockerfile
+    container_name: odx-quant-engine
+    ports:
+      - "8001:8001"
+    environment:
+      - MONGODB_URI=${MONGODB_URI}
+      - EVALUATION_INTERVAL_MINUTES=3
+    restart: always
+    networks:
+      - odx-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  ai-reasoning-service:
+    build:
+      context: ./services/ai-reasoning-service
+      dockerfile: Dockerfile
+    container_name: odx-ai-reasoning
+    ports:
+      - "8002:8002"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GROQ_MODEL=${GROQ_MODEL:-llama-3.1-70b-versatile}
+      - MONGODB_URI=${MONGODB_URI}
+    restart: always
+    networks:
+      - odx-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+    container_name: odx-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+    depends_on:
+      - api-gateway
+    restart: always
+    networks:
+      - odx-network
+
+networks:
+  odx-network:
+    driver: bridge

@@ -17,6 +17,7 @@ from app.trading_gate import get_trading_gate, set_global_risk_mode
 from app.no_trade_scoring import NoTradeScorer
 from app.volume_profile import VolumeProfileCalculator, FakeBreakoutDetector
 from app.trading_gate import get_trading_gate, set_global_risk_mode, RiskMode
+from app.socket_service import broadcast_setup_score_update, get_connected_clients_count
 
 # Configure logging
 logging.basicConfig(
@@ -48,6 +49,14 @@ async def scheduled_score_calculation():
                     logger.info(
                         f"✓ {symbol} ({timeframe}): Score={result['setup_score']:.2f}, "
                         f"Bias={result['market_bias']}"
+                    )
+                    # Broadcast real-time update
+                    await broadcast_setup_score_update(
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        score=result['setup_score'],
+                        components=result.get('components', {}),
+                        bias=result['market_bias']
                     )
                 else:
                     logger.warning(f"✗ Failed to calculate score for {symbol} ({timeframe})")
@@ -95,6 +104,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount Socket.io app
+from app.socket_service import socket_app
+app.mount("/socket.io", socket_app)
+logger.info("✓ Socket.io mounted at /socket.io")
 
 @app.get("/health")
 async def health():
@@ -144,6 +158,15 @@ async def evaluate_setup(request: ScoreRequest):
                 status_code=500,
                 detail=f"Failed to calculate score for {request.symbol}"
             )
+        
+        # Broadcast real-time update
+        await broadcast_setup_score_update(
+            symbol=result['symbol'],
+            timeframe=result['timeframe'],
+            score=result['setup_score'],
+            components=result.get('components', {}),
+            bias=result['market_bias']
+        )
         
         # Convert to response model
         return ScoreResponse(

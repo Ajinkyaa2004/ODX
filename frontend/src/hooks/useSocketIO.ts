@@ -16,6 +16,26 @@ interface MarketStatus {
   message: string;
 }
 
+interface OptionChainUpdate {
+  symbol: string;
+  strikes: any[];
+  timestamp: string;
+}
+
+interface OIAnalysisUpdate {
+  symbol: string;
+  data: any;
+  timestamp: string;
+}
+
+interface SetupScoreUpdate {
+  symbol: string;
+  timeframe: string;
+  score: number;
+  components: any;
+  timestamp: string;
+}
+
 export function useSocketIO(url: string) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [connected, setConnected] = useState(false);
@@ -24,6 +44,9 @@ export function useSocketIO(url: string) {
     isOpen: false,
     message: 'Connecting...'
   });
+  const [optionChainData, setOptionChainData] = useState<Record<string, OptionChainUpdate>>({});
+  const [oiAnalysisData, setOIAnalysisData] = useState<Record<string, OIAnalysisUpdate>>({});
+  const [setupScores, setSetupScores] = useState<Record<string, SetupScoreUpdate>>({});
 
   useEffect(() => {
     // Connect to Socket.io server
@@ -56,7 +79,30 @@ export function useSocketIO(url: string) {
       console.log('Market status:', data);
       setMarketStatus(data);
     });
+    socketIOInstance.on('option_chain_update', (data: OptionChainUpdate) => {
+      console.log('Option chain update:', data);
+      setOptionChainData((prev) => ({
+        ...prev,
+        [data.symbol]: data,
+      }));
+    });
 
+    socketIOInstance.on('oi_analysis_update', (data: OIAnalysisUpdate) => {
+      console.log('OI analysis update:', data);
+      setOIAnalysisData((prev) => ({
+        ...prev,
+        [data.symbol]: data,
+      }));
+    });
+
+    socketIOInstance.on('setup_score_update', (data: SetupScoreUpdate) => {
+      console.log('Setup score update:', data);
+      const key = `${data.symbol}_${data.timeframe}`;
+      setSetupScores((prev) => ({
+        ...prev,
+        [key]: data,
+      }));
+    });
     setSocket(socketInstance);
 
     return () => {
@@ -83,6 +129,9 @@ export function useSocketIO(url: string) {
     connected,
     prices,
     marketStatus,
+    optionChainData,
+    oiAnalysisData,
+    setupScores,
     subscribe,
     unsubscribe,
   };

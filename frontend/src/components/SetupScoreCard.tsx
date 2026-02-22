@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { TrendingUp, TrendingDown, Target, Activity, Zap, BarChart2, AlertCircle } from 'lucide-react';
+import { io } from 'socket.io-client';
 
 interface ScoreComponents {
   trend: {
@@ -58,14 +59,9 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
   const [scoreData, setScoreData] = useState<ScoreData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isRealTime, setIsRealTime] = useState(false);
 
-  useEffect(() => {
-    fetchScore();
-    const interval = setInterval(fetchScore, 180000); // Refresh every 3 minutes
-    return () => clearInterval(interval);
-  }, [symbol, timeframe]);
-
-  const fetchScore = async () => {
+  const fetchScore = useCallback(async () => {
     try {
       const response = await fetch(
         `http://localhost:8001/api/quant/score/${symbol}?timeframe=${timeframe}`
@@ -82,16 +78,63 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
     } finally {
       setLoading(false);
     }
-  };
+  }, [symbol, timeframe]);
+
+  // Socket.io connection for real-time updates
+  useEffect(() => {
+    const socketInstance = io('http://localhost:8001', {
+      transports: ['websocket', 'polling'],
+      path: '/socket.io'
+    });
+
+    socketInstance.on('connect', () => {
+      console.log('SetupScoreCard: Socket.io connected to quant-engine');
+      setIsRealTime(true);
+      socketInstance.emit('subscribe', `${symbol}_${timeframe}`);
+      socketInstance.emit('subscribe', symbol);
+    });
+
+    socketInstance.on('disconnect', () => {
+      console.log('SetupScoreCard: Socket.io disconnected');
+      setIsRealTime(false);
+    });
+
+    socketInstance.on('setup_score_update', (data: any) => {
+      console.log('SetupScoreCard: Received real-time update:', data);
+      if (data.symbol === symbol && data.timeframe === timeframe) {
+        setScoreData({
+          symbol: data.symbol,
+          timeframe: data.timeframe,
+          timestamp: data.timestamp,
+          setup_score: data.score,
+          components: data.components,
+          market_bias: data.bias,
+          evaluation_time_seconds: 0
+        });
+        setError(null);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      socketInstance.disconnect();
+    };
+  }, [symbol, timeframe]);
+
+  useEffect(() => {
+    fetchScore();
+    const interval = setInterval(fetchScore, 180000);
+    return () => clearInterval(interval);
+  }, [fetchScore]);
 
   if (loading) {
     return (
-      <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6 animate-pulse">
-        <div className="h-8 bg-gray-200 rounded mb-4"></div>
-        <div className="h-32 bg-gray-200 rounded mb-4"></div>
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-6 animate-pulse">
+        <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded mb-4"></div>
+        <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded mb-4"></div>
         <div className="space-y-3">
-          <div className="h-16 bg-gray-200 rounded"></div>
-          <div className="h-16 bg-gray-200 rounded"></div>
+          <div className="h-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
+          <div className="h-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
         </div>
       </div>
     );
@@ -99,14 +142,14 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
 
   if (error || !scoreData) {
     return (
-      <div className="bg-white rounded-xl shadow-md border border-red-200 p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-red-200 dark:border-red-800 p-6">
         <div className="flex items-start gap-3">
-          <div className="p-2 bg-red-50 rounded-lg">
-            <AlertCircle className="w-5 h-5 text-red-600" />
+          <div className="p-2 bg-red-50 dark:bg-red-900/30 rounded-lg">
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
           </div>
           <div>
-            <p className="font-semibold text-red-900">Unable to load score data</p>
-            <p className="text-sm text-red-600 mt-1">{error || 'Service unavailable'}</p>
+            <p className="font-semibold text-red-900 dark:text-red-100">Unable to load score data</p>
+            <p className="text-sm text-red-600 dark:text-red-400 mt-1">{error || 'Service unavailable'}</p>
           </div>
         </div>
       </div>
@@ -115,14 +158,12 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
 
   const { setup_score, components, market_bias } = scoreData;
 
-  // Score color based on value
   const getScoreColor = (score: number) => {
-    if (score >= 7) return 'text-green-600';
-    if (score >= 5) return 'text-yellow-600';
-    return 'text-red-600';
+    if (score >= 7) return 'text-green-600 dark:text-green-400';
+    if (score >= 5) return 'text-yellow-600 dark:text-yellow-400';
+    return 'text-red-600 dark:text-red-400';
   };
 
-  // Bias color
   const getBiasColor = (bias: string) => {
     if (bias === 'BULLISH') return 'bg-gradient-to-r from-green-500 to-green-600 text-white';
     if (bias === 'BEARISH') return 'bg-gradient-to-r from-red-500 to-red-600 text-white';
@@ -135,7 +176,6 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
     return <Activity className="w-5 h-5" />;
   };
 
-  // Component bar width
   const getBarWidth = (score: number) => `${(score / 10) * 100}%`;
 
   const getBarColor = (score: number) => {
@@ -157,26 +197,32 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow duration-200">
-      {/* Header */}
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-6 hover:shadow-lg transition-shadow duration-200">
       <div className="flex justify-between items-start mb-6">
         <div className="flex-1">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Setup Score</h2>
-          <div className="flex items-center gap-2 text-sm text-gray-600">
+          <div className="flex items-center gap-2 mb-2">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Setup Score</h2>
+            {isRealTime && (
+              <span className="flex items-center gap-1 px-2 py-0.5 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 rounded text-xs font-semibold">
+                <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                LIVE
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
             <span className="font-medium">{symbol}</span>
-            <span className="text-gray-400">•</span>
-            <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded font-semibold">{timeframe}</span>
+            <span className="text-gray-400 dark:text-gray-600">•</span>
+            <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded font-semibold">{timeframe}</span>
           </div>
         </div>
         <div className="text-right">
           <div className={`text-5xl font-bold ${getScoreColor(setup_score)}`}>
             {setup_score.toFixed(1)}
           </div>
-          <div className="text-sm text-gray-500 font-medium mt-1">out of 10</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400 font-medium mt-1">out of 10</div>
         </div>
       </div>
 
-      {/* Market Bias Badge */}
       <div className="mb-6">
         <div className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold shadow-md ${getBiasColor(market_bias)}`}>
           {getBiasIcon(market_bias)}
@@ -184,133 +230,122 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
         </div>
       </div>
 
-      {/* Component Breakdown */}
       <div className="space-y-4">
-        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <BarChart2 className="w-5 h-5 text-blue-600" />
+        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+          <BarChart2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           <span>Component Analysis</span>
         </h3>
         
         {/* Trend */}
-        <div className="bg-gray-50 rounded-lg p-4">
+        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               {getComponentIcon('trend')}
-              <span className="text-sm font-semibold text-gray-900">
-                Trend
-              </span>
-              <span className="text-xs text-gray-500">• {components.trend.weight}%</span>
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">Trend</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">• {components.trend.weight}%</span>
             </div>
             <span className={`text-lg font-bold ${getScoreColor(components.trend.score)}`}>
               {components.trend.score.toFixed(1)}
             </span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2.5">
+          <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5">
             <div 
               className={`h-2.5 rounded-full transition-all duration-500 ${getBarColor(components.trend.score)}`}
               style={{ width: getBarWidth(components.trend.score) }}
             ></div>
           </div>
           <div className="flex gap-2 mt-2">
-            <span className="text-xs px-2 py-1 bg-white rounded font-medium text-gray-700">
+            <span className="text-xs px-2 py-1 bg-white dark:bg-gray-800 rounded font-medium text-gray-700 dark:text-gray-300">
               {components.trend.alignment}
             </span>
-            <span className="text-xs px-2 py-1 bg-white rounded font-medium text-gray-700">
+            <span className="text-xs px-2 py-1 bg-white dark:bg-gray-800 rounded font-medium text-gray-700 dark:text-gray-300">
               {components.trend.slope}
             </span>
           </div>
         </div>
 
         {/* VWAP */}
-        <div className="bg-gray-50 rounded-lg p-4">
+        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               {getComponentIcon('vwap')}
-              <span className="text-sm font-semibold text-gray-900">
-                VWAP
-              </span>
-              <span className="text-xs text-gray-500">• {components.vwap.weight}%</span>
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">VWAP</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">• {components.vwap.weight}%</span>
             </div>
             <span className={`text-lg font-bold ${getScoreColor(components.vwap.score)}`}>
               {components.vwap.score.toFixed(1)}
             </span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2.5">
+          <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5">
             <div 
               className={`h-2.5 rounded-full transition-all duration-500 ${getBarColor(components.vwap.score)}`}
               style={{ width: getBarWidth(components.vwap.score) }}
             ></div>
           </div>
-          <div className="text-xs text-gray-600 mt-2">
+          <div className="text-xs text-gray-600 dark:text-gray-400 mt-2">
             {components.vwap.position} • {components.vwap.distance?.toFixed(2)}% distance
           </div>
         </div>
 
         {/* Structure */}
-        <div className="bg-gray-50 rounded-lg p-4">
+        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               {getComponentIcon('structure')}
-              <span className="text-sm font-semibold text-gray-900">
-                Structure
-              </span>
-              <span className="text-xs text-gray-500">• {components.structure.weight}%</span>
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">Structure</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">• {components.structure.weight}%</span>
             </div>
             <span className={`text-lg font-bold ${getScoreColor(components.structure.score)}`}>
               {components.structure.score.toFixed(1)}
             </span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2.5">
+          <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5">
             <div 
               className={`h-2.5 rounded-full transition-all duration-500 ${getBarColor(components.structure.score)}`}
               style={{ width: getBarWidth(components.structure.score) }}
             ></div>
           </div>
-          <div className="text-xs text-gray-600 mt-2">
+          <div className="text-xs text-gray-600 dark:text-gray-400 mt-2">
             {components.structure.pattern}
           </div>
         </div>
 
         {/* Momentum */}
-        <div className="bg-gray-50 rounded-lg p-4">
+        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               {getComponentIcon('momentum')}
-              <span className="text-sm font-semibold text-gray-900">
-                Momentum
-              </span>
-              <span className="text-xs text-gray-500">• {components.momentum.weight}%</span>
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">Momentum</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">• {components.momentum.weight}%</span>
             </div>
             <span className={`text-lg font-bold ${getScoreColor(components.momentum.score)}`}>
               {components.momentum.score.toFixed(1)}
             </span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2.5">
+          <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5">
             <div 
               className={`h-2.5 rounded-full transition-all duration-500 ${getBarColor(components.momentum.score)}`}
               style={{ width: getBarWidth(components.momentum.score) }}
             ></div>
           </div>
-          <div className="text-xs text-gray-600 mt-2">
+          <div className="text-xs text-gray-600 dark:text-gray-400 mt-2">
             RSI: {components.momentum.rsi?.toFixed(1)} • ROC: {components.momentum.roc?.toFixed(2)}%
           </div>
         </div>
 
         {/* Internals */}
-        <div className="bg-gray-50 rounded-lg p-4">
+        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               {getComponentIcon('internals')}
-              <span className="text-sm font-semibold text-gray-900">
-                Internals
-              </span>
-              <span className="text-xs text-gray-500">• {components.internals.weight}%</span>
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">Internals</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">• {components.internals.weight}%</span>
             </div>
             <span className={`text-lg font-bold ${getScoreColor(components.internals.score)}`}>
               {components.internals.score.toFixed(1)}
             </span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2.5">
+          <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5">
             <div 
               className={`h-2.5 rounded-full transition-all duration-500 ${getBarColor(components.internals.score)}`}
               style={{ width: getBarWidth(components.internals.score) }}
@@ -319,33 +354,30 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
         </div>
 
         {/* OI Confirmation */}
-        <div className="bg-gray-50 rounded-lg p-4">
+        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               {getComponentIcon('oi_confirmation')}
-              <span className="text-sm font-semibold text-gray-900">
-                OI Confirmation
-              </span>
-              <span className="text-xs text-gray-500">• {components.oi_confirmation.weight}%</span>
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">OI Confirmation</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">• {components.oi_confirmation.weight}%</span>
             </div>
             <span className={`text-lg font-bold ${getScoreColor(components.oi_confirmation.score)}`}>
               {components.oi_confirmation.score.toFixed(1)}
             </span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2.5">
+          <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5">
             <div 
               className={`h-2.5 rounded-full transition-all duration-500 ${getBarColor(components.oi_confirmation.score)}`}
               style={{ width: getBarWidth(components.oi_confirmation.score) }}
             ></div>
           </div>
-          <div className="text-xs text-gray-600 mt-2">
+          <div className="text-xs text-gray-600 dark:text-gray-400 mt-2">
             PCR: {components.oi_confirmation.pcr?.toFixed(2)} • {components.oi_confirmation.sentiment}
           </div>
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="mt-6 pt-4 border-t border-gray-200 text-xs text-gray-500 text-center">
+      <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 text-center">
         Updated {new Date(scoreData.timestamp).toLocaleTimeString()} • 
         Evaluated in {scoreData.evaluation_time_seconds.toFixed(2)}s
       </div>
