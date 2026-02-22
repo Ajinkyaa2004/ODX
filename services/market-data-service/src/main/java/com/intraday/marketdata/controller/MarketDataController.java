@@ -55,6 +55,18 @@ public class MarketDataController {
     }
     
     /**
+     * Get OHLC data for charting with indicators
+     */
+    @GetMapping(value = "/ohlc/{symbol}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Mono<java.util.List<Map<String, Object>>> getOHLCData(
+            @PathVariable String symbol,
+            @RequestParam(defaultValue = "5m") String timeframe,
+            @RequestParam(defaultValue = "50") int limit) {
+        log.info("Fetching OHLC data for {} (timeframe: {}, limit: {})", symbol, timeframe, limit);
+        return marketDataService.getOHLCData(symbol.toUpperCase(), timeframe, limit);
+    }
+    
+    /**
      * Get global market indices
      * Returns major global indices like S&P 500, Nasdaq, Dow, Nikkei, Hang Seng, India VIX
      */

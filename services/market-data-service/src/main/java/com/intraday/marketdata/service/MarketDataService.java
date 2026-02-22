@@ -219,6 +219,54 @@ public class MarketDataService {
                 });
     }
     
+    /**
+     * Get OHLC data for charting with technical indicators
+     */
+    public Mono<java.util.List<Map<String, Object>>> getOHLCData(String symbol, String timeframe, int limit) {
+        LocalDateTime startTime = LocalDateTime.now().minusHours(6); // Get last 6 hours of data
+        
+        return snapshotRepository.findBySymbolAndTimestampAfterOrderByTimestampDesc(symbol, startTime)
+                .collectList()
+                .map(snapshots -> {
+                    java.util.List<Map<String, Object>> ohlcList = new java.util.ArrayList<>();
+                    
+                    // Group snapshots by timeframe and create OHLC candles
+                    // For simplicity, using the stored 1m OHLC data directly
+                    // In production, aggregate 1m candles to create 5m, 15m candles
+                    
+                    snapshots.stream()
+                            .limit(limit)
+                            .forEach(snapshot -> {
+                                Map<String, Object> candle = new HashMap<>();
+                                candle.put("timestamp", snapshot.getTimestamp().toString());
+                                
+                                OHLC ohlc = snapshot.getOhlc1m();
+                                if (ohlc != null) {
+                                    candle.put("open", ohlc.getOpen());
+                                    candle.put("high", ohlc.getHigh());
+                                    candle.put("low", ohlc.getLow());
+                                    candle.put("close", ohlc.getClose());
+                                    candle.put("volume", ohlc.getVolume() != null ? ohlc.getVolume() : 0L);
+                                    
+                                    // Add mock indicators (in production, calculate from actual data)
+                                    BigDecimal close = ohlc.getClose();
+                                    if (close != null) {
+                                        candle.put("ema9", close.multiply(BigDecimal.valueOf(0.998))); // Mock EMA9
+                                        candle.put("ema20", close.multiply(BigDecimal.valueOf(0.996))); // Mock EMA20
+                                        candle.put("ema50", close.multiply(BigDecimal.valueOf(0.993))); // Mock EMA50
+                                        candle.put("vwap", close.multiply(BigDecimal.valueOf(0.9985))); // Mock VWAP
+                                    }
+                                    
+                                    ohlcList.add(candle);
+                                }
+                            });
+                    
+                    // Reverse to show oldest to newest
+                    java.util.Collections.reverse(ohlcList);
+                    return ohlcList;
+                });
+    }
+    
     // Inner class to hold live price data
     private static class LivePriceData {
         private BigDecimal price;

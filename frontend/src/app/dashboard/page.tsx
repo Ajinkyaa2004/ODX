@@ -14,6 +14,7 @@ import { GlobalNavbar } from '@/components/GlobalNavbar';
 import { SettingsPanel, useSettings } from '@/components/SettingsPanel';
 import { AlertManager } from '@/components/AlertManager';
 import { HelpModal } from '@/components/HelpModal';
+import PriceChart from '@/components/PriceChart';
 
 interface Indicator {
   ema: {
@@ -317,6 +318,11 @@ export default function DashboardPage() {
             {renderPriceTicker('NIFTY')}
           </div>
 
+          {/* Price Chart */}
+          <div className="mb-6">
+            <PriceChart symbol="NIFTY" initialTimeframe="5m" atmStrike={prices.NIFTY ? Math.round(prices.NIFTY.price / 50) * 50 : undefined} />
+          </div>
+
           {/* Phase 2: Setup Scoring */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <SetupScoreCard symbol="NIFTY" timeframe="5m" />
@@ -486,6 +492,11 @@ export default function DashboardPage() {
           {/* Price Ticker */}
           <div className="mb-6">
             {renderPriceTicker('BANKNIFTY')}
+          </div>
+
+          {/* Price Chart */}
+          <div className="mb-6">
+            <PriceChart symbol="BANKNIFTY" initialTimeframe="5m" atmStrike={prices.BANKNIFTY ? Math.round(prices.BANKNIFTY.price / 100) * 100 : undefined} />
           </div>
 
           {/* Phase 2: Setup Scoring */}
