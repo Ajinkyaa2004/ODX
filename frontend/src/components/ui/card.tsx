@@ -22,3 +22,7 @@ export function CardDescription({ className, ...props }: React.HTMLAttributes<HT
 export function CardContent({ className, ...props }: CardProps) {
   return <div className={cn("p-6 pt-0", className)} {...props} />;
 }
+
+export function CardFooter({ className, ...props }: CardProps) {
+  return <div className={cn("flex items-center p-6 pt-0", className)} {...props} />;
+}

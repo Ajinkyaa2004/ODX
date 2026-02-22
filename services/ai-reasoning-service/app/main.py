@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
+from app.routes import router
+from app.config import settings
 
 # Configure logging
 logging.basicConfig(
@@ -16,13 +18,15 @@ async def lifespan(app: FastAPI):
     logger.info("========================================")
     logger.info("AI Reasoning Service Starting...")
     logger.info("Port: 8002")
+    logger.info(f"Model: {settings.groq_model}")
+    logger.info(f"Groq API Configured: {bool(settings.groq_api_key)}")
     logger.info("========================================")
     yield
     logger.info("AI Reasoning Service Shutting Down...")
 
 app = FastAPI(
     title="AI Reasoning Service",
-    description="AI-powered trade explanation and reasoning service",
+    description="AI-powered trade explanation and reasoning service using Groq",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -36,13 +40,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include AI reasoning routes
+app.include_router(router)
+
 @app.get("/health")
 async def health():
     """Health check endpoint"""
     return {
         "service": "ai-reasoning-service",
         "status": "UP",
-        "port": 8002
+        "port": 8002,
+        "groq_configured": bool(settings.groq_api_key),
+        "model": settings.groq_model
     }
 
 @app.get("/api/ai/health")
@@ -52,12 +61,20 @@ async def api_health():
 
 @app.get("/")
 async def root():
-    """Root endpoint"""
+    """Root endpoint with service info"""
     return {
         "service": "AI Reasoning Service",
+        "version": "1.0.0",
         "status": "running",
-        "docs": "/docs",
-        "health": "/health"
+        "model": settings.groq_model,
+        "groq_configured": bool(settings.groq_api_key),
+        "endpoints": {
+            "docs": "/docs",
+            "health": "/health",
+            "generate_reasoning": "POST /api/ai/generate-reasoning",
+            "quick_reasoning": "POST /api/ai/quick-reasoning",
+            "test_connection": "GET /api/ai/test-connection"
+        }
     }
 
 if __name__ == "__main__":

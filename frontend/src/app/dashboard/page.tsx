@@ -9,6 +9,7 @@ import StrikeRecommendationCard from '@/components/StrikeRecommendationCard';
 import OIAnalysisPanel from '@/components/OIAnalysisPanel';
 import RiskCalculatorPanel from '@/components/RiskCalculatorPanel';
 import PnLSimulator from '@/components/PnLSimulator';
+import { AIReasoningPanel } from '@/components/AIReasoningPanel';
 
 interface Indicator {
   ema: {
@@ -341,6 +342,37 @@ export default function DashboardPage() {
             <PnLSimulator symbol="NIFTY" currentPrice={prices.NIFTY?.price || 0} />
           </div>
 
+          {/* Phase 7: AI Reasoning */}
+          <div className="mb-6">
+            <AIReasoningPanel 
+              symbol="NIFTY" 
+              evaluationData={{
+                symbol: "NIFTY",
+                setup_score: 7.5,
+                no_trade_score: 3.2,
+                decision: "TRADE",
+                threshold: 6.5,
+                no_trade_threshold: 5.0,
+                trend_score: 8.5,
+                trend_direction: "BULLISH",
+                vwap_score: 7.0,
+                vwap_status: "Above VWAP",
+                structure_score: 7.5,
+                oi_score: 8.0,
+                oi_pattern: "Call buying at support",
+                volatility_score: 6.5,
+                volatility_regime: "MODERATE",
+                momentum_score: 7.8,
+                internal_score: 7.2,
+                time_risk: "PRIME_TIME",
+                fake_breakout_risk: "LOW",
+                recommended_strike: 22450,
+                option_type: "CALL"
+              }}
+              autoGenerate={false}
+            />
+          </div>
+
           {/* Technical Indicators */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
@@ -479,6 +511,37 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <RiskCalculatorPanel symbol="BANKNIFTY" currentPrice={prices.BANKNIFTY?.price || 0} />
             <PnLSimulator symbol="BANKNIFTY" currentPrice={prices.BANKNIFTY?.price || 0} />
+          </div>
+
+          {/* Phase 7: AI Reasoning */}
+          <div className="mb-6">
+            <AIReasoningPanel 
+              symbol="BANKNIFTY" 
+              evaluationData={{
+                symbol: "BANKNIFTY",
+                setup_score: 6.8,
+                no_trade_score: 4.1,
+                decision: "TRADE",
+                threshold: 6.5,
+                no_trade_threshold: 5.0,
+                trend_score: 7.2,
+                trend_direction: "BULLISH",
+                vwap_score: 6.5,
+                vwap_status: "Above VWAP",
+                structure_score: 7.0,
+                oi_score: 7.5,
+                oi_pattern: "Put writing at resistance",
+                volatility_score: 6.8,
+                volatility_regime: "MODERATE",
+                momentum_score: 6.9,
+                internal_score: 6.5,
+                time_risk: "PRIME_TIME",
+                fake_breakout_risk: "MODERATE",
+                recommended_strike: 46800,
+                option_type: "CALL"
+              }}
+              autoGenerate={false}
+            />
           </div>
 
           {/* Technical Indicators */}
