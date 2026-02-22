@@ -79,8 +79,6 @@ public class OptionChainService {
      * Get spot price from market-data-service
      */
     private Mono<Double> getSpotPrice(String symbol) {
-        String marketDataUrl = "http://market-data-service:8081/api/market-data/latest?symbol=" + symbol;
-        
         WebClient webClient = webClientBuilder.baseUrl("http://market-data-service:8081").build();
         
         return webClient.get()

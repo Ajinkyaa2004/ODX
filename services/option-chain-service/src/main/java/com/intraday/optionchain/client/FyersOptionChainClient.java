@@ -18,6 +18,7 @@ import java.util.Random;
  */
 @Slf4j
 @Component
+@SuppressWarnings("unused")
 public class FyersOptionChainClient {
     
     private final WebClient webClient;
