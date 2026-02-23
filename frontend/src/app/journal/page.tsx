@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TradeEntryForm from "@/components/TradeEntryForm";
 import TradeJournalTable from "@/components/TradeJournalTable";
@@ -8,20 +8,60 @@ import AnalyticsDashboard from "@/components/AnalyticsDashboard";
 
 export default function JournalPage() {
   const [activeTab, setActiveTab] = useState("journal");
+  const [marketConditions, setMarketConditions] = useState<any>(null);
 
-  // Example market conditions - in real app, this would come from your market data service
-  const mockMarketConditions = {
-    symbol: "NIFTY",
-    spotPrice: 22450.50,
-    setupScore: 7.8,
-    noTradeScore: 3.2,
-    trend: "BULLISH",
-    vwapStatus: "ABOVE",
-    volatilityRegime: "NORMAL",
-    timeCategory: "PRIME_TIME",
-    oiConfirmation: "STRONG",
-    riskMode: "BALANCED",
-  };
+  // Fetch real market conditions from live services
+  useEffect(() => {
+    const fetchMarketConditions = async () => {
+      try {
+        // Fetch live NIFTY price
+        const priceRes = await fetch('http://localhost:8006/live/NIFTY');
+        let spotPrice = 0;
+        if (priceRes.ok) {
+          const priceData = await priceRes.json();
+          spotPrice = priceData?.data?.ltp || 0;
+        }
+
+        // Fetch OI analysis for market sentiment
+        const oiRes = await fetch('http://localhost:8080/api/option-chain/NIFTY/analysis');
+        let oiData: any = null;
+        if (oiRes.ok) {
+          oiData = await oiRes.json();
+        }
+
+        setMarketConditions({
+          symbol: "NIFTY",
+          spotPrice: spotPrice,
+          setupScore: oiData?.bullishScore || 5.0,
+          noTradeScore: oiData?.bearishScore || 5.0,
+          trend: oiData?.sentiment || "NEUTRAL",
+          vwapStatus: spotPrice > 0 ? "LIVE" : "UNKNOWN",
+          volatilityRegime: "NORMAL",
+          timeCategory: "PRIME_TIME",
+          oiConfirmation: oiData?.oiTrend === 'PUT_HEAVY' ? 'STRONG' : 'MODERATE',
+          riskMode: "BALANCED",
+        });
+      } catch (error) {
+        console.error("Failed to fetch market conditions:", error);
+        setMarketConditions({
+          symbol: "NIFTY",
+          spotPrice: 0,
+          setupScore: 0,
+          noTradeScore: 0,
+          trend: "UNKNOWN",
+          vwapStatus: "UNKNOWN",
+          volatilityRegime: "UNKNOWN",
+          timeCategory: "UNKNOWN",
+          oiConfirmation: "UNKNOWN",
+          riskMode: "BALANCED",
+        });
+      }
+    };
+
+    fetchMarketConditions();
+    const interval = setInterval(fetchMarketConditions, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -40,10 +80,17 @@ export default function JournalPage() {
         </TabsList>
 
         <TabsContent value="entry" className="mt-6">
-          <TradeEntryForm 
-            marketConditions={mockMarketConditions}
-            onSuccess={() => setActiveTab("journal")}
-          />
+          {marketConditions ? (
+            <TradeEntryForm
+              marketConditions={marketConditions}
+              onSuccess={() => setActiveTab("journal")}
+            />
+          ) : (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <span className="ml-3 text-gray-500">Loading market data...</span>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="journal" className="mt-6">

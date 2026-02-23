@@ -53,7 +53,7 @@ export default function OptionChainPanel({ symbol }: OptionChainPanelProps) {
 
   const fetchOptionChain = async () => {
     try {
-      const response = await fetch(`http://localhost:8082/api/option-chain/${symbol}`);
+      const response = await fetch(`http://localhost:8080/api/option-chain/${symbol}`);
       
       if (!response.ok) throw new Error('Failed to fetch option chain');
       

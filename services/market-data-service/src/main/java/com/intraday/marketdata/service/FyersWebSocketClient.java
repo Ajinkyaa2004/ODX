@@ -61,9 +61,12 @@ public class FyersWebSocketClient {
             return;
         }
         
+        // FYERS WebSocket URL with access token as query parameter
+        String wsUrl = fyersConfig.getWebsocketUrl() + 
+                "?access_token=" + fyersConfig.getAuthToken();
+        
         Request request = new Request.Builder()
-                .url(fyersConfig.getWebsocketUrl())
-                .addHeader("Authorization", fyersConfig.getAuthToken())
+                .url(wsUrl)
                 .build();
         
         webSocket = client.newWebSocket(request, new WebSocketListener() {

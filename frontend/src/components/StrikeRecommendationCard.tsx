@@ -37,7 +37,7 @@ export default function StrikeRecommendationCard({ symbol }: StrikeRecommendatio
 
   const fetchRecommendations = async () => {
     try {
-      const response = await fetch(`http://localhost:8082/api/option-chain/${symbol}/recommended`);
+      const response = await fetch(`http://localhost:8080/api/option-chain/${symbol}/recommended`);
       
       if (!response.ok) throw new Error('Failed to fetch recommendations');
       

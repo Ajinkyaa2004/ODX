@@ -64,17 +64,24 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
   const fetchScore = useCallback(async () => {
     try {
       const response = await fetch(
-        `http://localhost:8001/api/quant/score/${symbol}?timeframe=${timeframe}`
+        `http://localhost:8080/api/quant/score/${symbol}?timeframe=${timeframe}`
       );
-      
+
+      if (response.status === 404) {
+        // Score not available yet - quant engine needs more data
+        setError('Score calculation pending - collecting market data...');
+        setLoading(false);
+        return;
+      }
+
       if (!response.ok) throw new Error('Failed to fetch score');
-      
+
       const data = await response.json();
       setScoreData(data);
       setError(null);
     } catch (err) {
       console.error('Error fetching score:', err);
-      setError('Failed to load score data');
+      setError('Waiting for quant engine data...');
     } finally {
       setLoading(false);
     }
@@ -82,7 +89,7 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
 
   // Socket.io connection for real-time updates
   useEffect(() => {
-    const socketInstance = io('http://localhost:8001', {
+    const socketInstance = io('http://localhost:8080', {
       transports: ['websocket', 'polling'],
       path: '/socket.io'
     });
@@ -235,7 +242,7 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
           <BarChart2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           <span>Component Analysis</span>
         </h3>
-        
+
         {/* Trend */}
         <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
@@ -249,7 +256,7 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
             </span>
           </div>
           <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5">
-            <div 
+            <div
               className={`h-2.5 rounded-full transition-all duration-500 ${getBarColor(components.trend.score)}`}
               style={{ width: getBarWidth(components.trend.score) }}
             ></div>
@@ -277,7 +284,7 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
             </span>
           </div>
           <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5">
-            <div 
+            <div
               className={`h-2.5 rounded-full transition-all duration-500 ${getBarColor(components.vwap.score)}`}
               style={{ width: getBarWidth(components.vwap.score) }}
             ></div>
@@ -300,7 +307,7 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
             </span>
           </div>
           <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5">
-            <div 
+            <div
               className={`h-2.5 rounded-full transition-all duration-500 ${getBarColor(components.structure.score)}`}
               style={{ width: getBarWidth(components.structure.score) }}
             ></div>
@@ -323,7 +330,7 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
             </span>
           </div>
           <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5">
-            <div 
+            <div
               className={`h-2.5 rounded-full transition-all duration-500 ${getBarColor(components.momentum.score)}`}
               style={{ width: getBarWidth(components.momentum.score) }}
             ></div>
@@ -346,7 +353,7 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
             </span>
           </div>
           <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5">
-            <div 
+            <div
               className={`h-2.5 rounded-full transition-all duration-500 ${getBarColor(components.internals.score)}`}
               style={{ width: getBarWidth(components.internals.score) }}
             ></div>
@@ -366,7 +373,7 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
             </span>
           </div>
           <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2.5">
-            <div 
+            <div
               className={`h-2.5 rounded-full transition-all duration-500 ${getBarColor(components.oi_confirmation.score)}`}
               style={{ width: getBarWidth(components.oi_confirmation.score) }}
             ></div>
@@ -378,7 +385,7 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
       </div>
 
       <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 text-center">
-        Updated {new Date(scoreData.timestamp).toLocaleTimeString()} • 
+        Updated {new Date(scoreData.timestamp).toLocaleTimeString()} •
         Evaluated in {scoreData.evaluation_time_seconds.toFixed(2)}s
       </div>
     </div>

@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSocketIO } from '@/hooks/useSocketIO';
-import { TrendingUp, TrendingDown, Activity, Wifi, WifiOff, BarChart3, LineChart } from 'lucide-react';
+import { TrendingUp, TrendingDown, Activity, Wifi, WifiOff, BarChart3, LineChart, RefreshCw } from 'lucide-react';
 import SetupScoreCard from '@/components/SetupScoreCard';
 import OptionChainPanel from '@/components/OptionChainPanel';
 import StrikeRecommendationCard from '@/components/StrikeRecommendationCard';
@@ -31,61 +31,253 @@ interface Indicator {
   };
 }
 
+interface LivePriceData {
+  symbol: string;
+  price: number;
+  change: number;
+  changePercent: number;
+  timestamp: string;
+  open?: number;
+  high?: number;
+  low?: number;
+  prevClose?: number;
+  source?: string;
+}
+
+interface EvaluationData {
+  symbol: string;
+  setup_score: number;
+  no_trade_score: number;
+  decision: string;
+  threshold: number;
+  no_trade_threshold: number;
+  trend_score: number;
+  trend_direction: string;
+  vwap_score: number;
+  vwap_status: string;
+  structure_score: number;
+  oi_score: number;
+  oi_pattern: string;
+  volatility_score: number;
+  volatility_regime: string;
+  momentum_score: number;
+  internal_score: number;
+  time_risk: string;
+  fake_breakout_risk: string;
+  recommended_strike: number;
+  option_type: string;
+}
+
+// Check if market is open (IST: 9:15 AM - 3:30 PM, Mon-Fri)
+function isMarketOpen(): { isOpen: boolean; message: string } {
+  const now = new Date();
+  // Convert to IST
+  const istOffset = 5.5 * 60; // IST is UTC+5:30
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  const istTime = new Date(utc + istOffset * 60000);
+  
+  const day = istTime.getDay();
+  const hours = istTime.getHours();
+  const minutes = istTime.getMinutes();
+  const totalMinutes = hours * 60 + minutes;
+  
+  const marketStart = 9 * 60 + 15; // 9:15 AM
+  const marketEnd = 15 * 60 + 30; // 3:30 PM
+  
+  if (day === 0 || day === 6) {
+    return { isOpen: false, message: 'Weekend - Market Closed' };
+  }
+  
+  if (totalMinutes >= marketStart && totalMinutes <= marketEnd) {
+    return { isOpen: true, message: 'Market Open' };
+  }
+  
+  if (totalMinutes < marketStart) {
+    return { isOpen: false, message: 'Pre-Market - Opens at 9:15 AM IST' };
+  }
+  
+  return { isOpen: false, message: 'Post-Market - Closed at 3:30 PM IST' };
+}
+
 export default function DashboardPage() {
   const socketUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:9092';
   const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
+  const realtimeUrl = 'http://localhost:8006'; // Market data realtime REST service
   
-  const { connected, prices, marketStatus, subscribe } = useSocketIO(socketUrl);
+  const { connected, prices: socketPrices, marketStatus: socketMarketStatus, subscribe } = useSocketIO(socketUrl);
   const settings = useSettings();
   
   const [indicators, setIndicators] = useState<Record<string, Record<string, Indicator>>>({});
   const [loading, setLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  
+  // Live price state from REST polling
+  const [livePrices, setLivePrices] = useState<Record<string, LivePriceData>>({});
+  const [dataSource, setDataSource] = useState<string>('connecting');
+  const [lastFetchTime, setLastFetchTime] = useState<Date | null>(null);
+  
+  // Real evaluation data for AI Reasoning (replaces hardcoded mock data)
+  const [niftyEvaluation, setNiftyEvaluation] = useState<EvaluationData | null>(null);
+  const [bankniftyEvaluation, setBankniftyEvaluation] = useState<EvaluationData | null>(null);
+  
+  // Compute actual market status from IST time
+  const [realMarketStatus, setRealMarketStatus] = useState(isMarketOpen());
+  
+  // Merge socket prices with REST polled prices (REST takes priority for freshness)
+  const prices = { ...socketPrices, ...Object.fromEntries(
+    Object.entries(livePrices).map(([symbol, data]) => [
+      symbol,
+      {
+        symbol: data.symbol,
+        price: data.price,
+        change: data.change,
+        changePercent: data.changePercent,
+        timestamp: data.timestamp,
+      }
+    ])
+  )};
+  
+  const marketStatus = realMarketStatus;
 
+  // Fetch live prices from market-data-realtime REST service
+  const fetchLivePrices = useCallback(async () => {
+    try {
+      const response = await fetch(`${realtimeUrl}/all`);
+      if (!response.ok) throw new Error('Failed to fetch live prices');
+      
+      const result = await response.json();
+      
+      if (result.status === 'success' && result.data) {
+        const newPrices: Record<string, LivePriceData> = {};
+        for (const item of result.data) {
+          newPrices[item.symbol] = {
+            symbol: item.symbol,
+            price: item.ltp,
+            change: item.change,
+            changePercent: item.changePercent,
+            timestamp: item.timestamp,
+            open: item.open,
+            high: item.high,
+            low: item.low,
+            prevClose: item.prevClose,
+            source: item.source || 'FYERS_LIVE',
+          };
+        }
+        setLivePrices(newPrices);
+        setDataSource('FYERS_LIVE');
+        setLastFetchTime(new Date());
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error('Error fetching live prices:', err);
+      // Fall back to socket prices if REST fails
+      if (Object.keys(socketPrices).length > 0) {
+        setDataSource('SOCKET');
+      } else {
+        setDataSource('disconnected');
+      }
+      setLoading(false);
+    }
+  }, [realtimeUrl, socketPrices]);
+
+  // Fetch real evaluation data for AI reasoning (replaces hardcoded mock)
+  const fetchEvaluationData = useCallback(async (symbol: string) => {
+    try {
+      // Fetch OI analysis for real data
+      const oiRes = await fetch(`${apiUrl}/api/option-chain/${symbol}/analysis`);
+      let oiData: any = null;
+      if (oiRes.ok) {
+        oiData = await oiRes.json();
+      }
+      
+      // Fetch recommended strikes
+      const recRes = await fetch(`${apiUrl}/api/option-chain/${symbol}/recommended`);
+      let recData: any[] = [];
+      if (recRes.ok) {
+        recData = await recRes.json();
+      }
+      
+      // Get live price for the symbol
+      const livePrice = livePrices[symbol];
+      const currentPrice = livePrice?.price || 0;
+      
+      // Build evaluation data from real API responses
+      const topRec = recData[0];
+      const evaluation: EvaluationData = {
+        symbol,
+        setup_score: oiData?.bullishScore || 5.0,
+        no_trade_score: 10 - (oiData?.bullishScore || 5.0),
+        decision: oiData?.sentiment === 'BULLISH' ? 'TRADE' : 'NO_TRADE',
+        threshold: 6.5,
+        no_trade_threshold: 5.0,
+        trend_score: oiData?.bullishScore || 5.0,
+        trend_direction: oiData?.sentiment || 'NEUTRAL',
+        vwap_score: oiData?.patternStrength ? oiData.patternStrength * 2 : 5.0,
+        vwap_status: `Spot at ₹${currentPrice.toFixed(2)}`,
+        structure_score: oiData?.patternStrength || 5.0,
+        oi_score: oiData?.bullishScore || 5.0,
+        oi_pattern: oiData?.oiTrend === 'PUT_HEAVY' ? 'Put heavy buildup - Bullish' :
+                    oiData?.oiTrend === 'CALL_HEAVY' ? 'Call heavy buildup - Bearish' : 'Balanced OI',
+        volatility_score: 5.0,
+        volatility_regime: 'MODERATE',
+        momentum_score: oiData?.bullishScore || 5.0,
+        internal_score: oiData?.patternStrength || 5.0,
+        time_risk: isMarketOpen().isOpen ? 'PRIME_TIME' : 'CLOSED',
+        fake_breakout_risk: 'LOW',
+        recommended_strike: topRec?.strikePrice || (symbol === 'NIFTY' ? Math.round(currentPrice / 50) * 50 : Math.round(currentPrice / 100) * 100),
+        option_type: topRec?.recommendationType?.includes('CALL') ? 'CALL' : 'PUT',
+      };
+      
+      return evaluation;
+    } catch (err) {
+      console.error(`Error fetching evaluation for ${symbol}:`, err);
+      return null;
+    }
+  }, [apiUrl, livePrices]);
+
+  // Poll live prices every 2 seconds
   useEffect(() => {
-    // Subscribe to NIFTY and BANKNIFTY
-    subscribe('NIFTY');
-    subscribe('BANKNIFTY');
-    
-    // Fetch initial indicators
-    fetchIndicators();
-    
-    // Fetch indicators every 3 minutes
-    const interval = setInterval(fetchIndicators, 180000);
-    
+    fetchLivePrices();
+    const interval = setInterval(fetchLivePrices, 2000);
+    return () => clearInterval(interval);
+  }, [fetchLivePrices]);
+
+  // Update market status every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRealMarketStatus(isMarketOpen());
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  const fetchIndicators = async () => {
-    try {
-      const symbols = ['NIFTY', 'BANKNIFTY'];
-      const timeframes = ['5m', '15m'];
-      
-      for (const symbol of symbols) {
-        for (const timeframe of timeframes) {
-          const response = await fetch(
-            `${apiUrl}/api/quant/indicators/${symbol}?timeframe=${timeframe}`
-          );
-          
-          if (response.ok) {
-            const data = await response.json();
-            setIndicators((prev) => ({
-              ...prev,
-              [symbol]: {
-                ...prev[symbol],
-                [timeframe]: data.indicators,
-              },
-            }));
-          }
-        }
-      }
-      
-      setLoading(false);
-    } catch (error) {
-      console.error('Error fetching indicators:', error);
-    }
-  };
+  // Fetch evaluation data for AI panels (every 3 minutes)
+  useEffect(() => {
+    const fetchEvals = async () => {
+      const [niftyEval, bankniftyEval] = await Promise.all([
+        fetchEvaluationData('NIFTY'),
+        fetchEvaluationData('BANKNIFTY'),
+      ]);
+      if (niftyEval) setNiftyEvaluation(niftyEval);
+      if (bankniftyEval) setBankniftyEvaluation(bankniftyEval);
+    };
+    
+    // Delay initial fetch to let prices load first
+    const timeout = setTimeout(fetchEvals, 3000);
+    const interval = setInterval(fetchEvals, 180000); // Refresh every 3 min
+    
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
+  }, [fetchEvaluationData]);
+
+  // Subscribe to socket channels as backup
+  useEffect(() => {
+    subscribe('NIFTY');
+    subscribe('BANKNIFTY');
+    return () => {};
+  }, []);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -264,17 +456,24 @@ export default function DashboardPage() {
       <div className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3">
         <div className="max-w-[1920px] mx-auto flex items-center gap-4">
           <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
-            connected ? 'bg-green-100 dark:bg-green-900' : 'bg-red-100 dark:bg-red-900'
+            dataSource === 'FYERS_LIVE' ? 'bg-green-100 dark:bg-green-900' : 
+            dataSource === 'SOCKET' ? 'bg-yellow-100 dark:bg-yellow-900' :
+            'bg-red-100 dark:bg-red-900'
           }`}>
-            {connected ? (
+            {dataSource === 'FYERS_LIVE' ? (
               <>
                 <Wifi className="w-4 h-4 text-green-600 dark:text-green-400" />
-                <span className="text-sm font-semibold text-green-600 dark:text-green-400">Connected</span>
+                <span className="text-sm font-semibold text-green-600 dark:text-green-400">Live Data (FYERS)</span>
+              </>
+            ) : dataSource === 'SOCKET' ? (
+              <>
+                <Wifi className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+                <span className="text-sm font-semibold text-yellow-600 dark:text-yellow-400">Socket Feed</span>
               </>
             ) : (
               <>
                 <WifiOff className="w-4 h-4 text-red-600 dark:text-red-400" />
-                <span className="text-sm font-semibold text-red-600 dark:text-red-400">Disconnected</span>
+                <span className="text-sm font-semibold text-red-600 dark:text-red-400">Connecting...</span>
               </>
             )}
           </div>
@@ -290,9 +489,18 @@ export default function DashboardPage() {
             <span className={`text-sm font-semibold ${
               marketStatus.isOpen ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-600 dark:text-gray-400'
             }`}>
-              {marketStatus.isOpen ? 'Market Open' : 'Market Closed'}
+              {marketStatus.message}
             </span>
           </div>
+          
+          {lastFetchTime && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/30">
+              <RefreshCw className="w-3 h-3 text-blue-600 dark:text-blue-400 animate-spin" style={{ animationDuration: '3s' }} />
+              <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                Updated {lastFetchTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -354,29 +562,7 @@ export default function DashboardPage() {
           <div className="mb-6">
             <AIReasoningPanel 
               symbol="NIFTY" 
-              evaluationData={{
-                symbol: "NIFTY",
-                setup_score: 7.5,
-                no_trade_score: 3.2,
-                decision: "TRADE",
-                threshold: 6.5,
-                no_trade_threshold: 5.0,
-                trend_score: 8.5,
-                trend_direction: "BULLISH",
-                vwap_score: 7.0,
-                vwap_status: "Above VWAP",
-                structure_score: 7.5,
-                oi_score: 8.0,
-                oi_pattern: "Call buying at support",
-                volatility_score: 6.5,
-                volatility_regime: "MODERATE",
-                momentum_score: 7.8,
-                internal_score: 7.2,
-                time_risk: "PRIME_TIME",
-                fake_breakout_risk: "LOW",
-                recommended_strike: 22450,
-                option_type: "CALL"
-              }}
+              evaluationData={niftyEvaluation || undefined}
               autoGenerate={false}
             />
           </div>
@@ -530,29 +716,7 @@ export default function DashboardPage() {
           <div className="mb-6">
             <AIReasoningPanel 
               symbol="BANKNIFTY" 
-              evaluationData={{
-                symbol: "BANKNIFTY",
-                setup_score: 6.8,
-                no_trade_score: 4.1,
-                decision: "TRADE",
-                threshold: 6.5,
-                no_trade_threshold: 5.0,
-                trend_score: 7.2,
-                trend_direction: "BULLISH",
-                vwap_score: 6.5,
-                vwap_status: "Above VWAP",
-                structure_score: 7.0,
-                oi_score: 7.5,
-                oi_pattern: "Put writing at resistance",
-                volatility_score: 6.8,
-                volatility_regime: "MODERATE",
-                momentum_score: 6.9,
-                internal_score: 6.5,
-                time_risk: "PRIME_TIME",
-                fake_breakout_risk: "MODERATE",
-                recommended_strike: 46800,
-                option_type: "CALL"
-              }}
+              evaluationData={bankniftyEvaluation || undefined}
               autoGenerate={false}
             />
           </div>

@@ -40,11 +40,19 @@ spring:
           filters:
             - StripPrefix=0
         
-        # Quant Engine
+        # Quant Engine (with WebSocket support for Socket.io)
         - id: quant-engine
-          uri: ${QUANT_ENGINE_URL:http://localhost:8001}
+          uri: ${QUANT_ENGINE_URL:http://quant-engine:8001}
           predicates:
             - Path=/api/quant/**
+          filters:
+            - StripPrefix=0
+        
+        # Quant Engine WebSocket (Socket.io)
+        - id: quant-engine-websocket
+          uri: ${QUANT_ENGINE_WS_URL:ws://quant-engine:8001}
+          predicates:
+            - Path=/socket.io/**
           filters:
             - StripPrefix=0
         
@@ -54,8 +62,14 @@ spring:
           predicates:
             - Path=/api/ai/**
           filters:
-            - StripPrefix=0
-      
+            - StripPrefix=0            
+        # FYERS Data Bridge (Real-time Market Data)
+        - id: fyers-bridge
+          uri: http://fyers-bridge:8005
+          predicates:
+            - Path=/api/fyers/**
+          filters:
+            - StripPrefix=2      
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
       

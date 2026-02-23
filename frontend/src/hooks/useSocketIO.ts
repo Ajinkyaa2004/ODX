@@ -79,7 +79,7 @@ export function useSocketIO(url: string) {
       console.log('Market status:', data);
       setMarketStatus(data);
     });
-    socketIOInstance.on('option_chain_update', (data: OptionChainUpdate) => {
+    socketInstance.on('option_chain_update', (data: OptionChainUpdate) => {
       console.log('Option chain update:', data);
       setOptionChainData((prev) => ({
         ...prev,
@@ -87,7 +87,7 @@ export function useSocketIO(url: string) {
       }));
     });
 
-    socketIOInstance.on('oi_analysis_update', (data: OIAnalysisUpdate) => {
+    socketInstance.on('oi_analysis_update', (data: OIAnalysisUpdate) => {
       console.log('OI analysis update:', data);
       setOIAnalysisData((prev) => ({
         ...prev,
@@ -95,7 +95,7 @@ export function useSocketIO(url: string) {
       }));
     });
 
-    socketIOInstance.on('setup_score_update', (data: SetupScoreUpdate) => {
+    socketInstance.on('setup_score_update', (data: SetupScoreUpdate) => {
       console.log('Setup score update:', data);
       const key = `${data.symbol}_${data.timeframe}`;
       setSetupScores((prev) => ({

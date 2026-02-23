@@ -18,14 +18,7 @@ interface GlobalNavbarProps {
 
 export function GlobalNavbar({ onSettingsClick, onHelpClick }: GlobalNavbarProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [indices, setIndices] = useState<GlobalIndex[]>([
-    { name: "S&P 500", value: 5850.23, change: 45.12, changePercent: 0.78 },
-    { name: "Nasdaq", value: 18432.65, change: -23.45, changePercent: -0.13 },
-    { name: "Dow", value: 42156.78, change: 123.45, changePercent: 0.29 },
-    { name: "Nikkei", value: 38245.12, change: 89.34, changePercent: 0.23 },
-    { name: "Hang Seng", value: 20123.45, change: -156.78, changePercent: -0.77 },
-    { name: "India VIX", value: 14.25, change: 0.45, changePercent: 3.26 },
-  ]);
+  const [indices, setIndices] = useState<GlobalIndex[]>([]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -35,21 +28,30 @@ export function GlobalNavbar({ onSettingsClick, onHelpClick }: GlobalNavbarProps
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch global indices (TODO: Replace with real API call)
+  // Fetch real live market data from FYERS realtime service
   useEffect(() => {
     const fetchIndices = async () => {
       try {
-        // TODO: Call backend API when implemented
-        // const response = await fetch('http://localhost:8080/api/market-data/global-indices');
-        // const data = await response.json();
-        // setIndices(data);
+        const response = await fetch('http://localhost:8006/all');
+        if (response.ok) {
+          const result = await response.json();
+          if (result.status === 'success' && result.data) {
+            const liveIndices: GlobalIndex[] = result.data.map((item: any) => ({
+              name: item.symbol === 'NIFTY' ? 'NIFTY 50' : item.symbol === 'BANKNIFTY' ? 'BANK NIFTY' : item.symbol,
+              value: item.ltp,
+              change: item.change,
+              changePercent: item.changePercent,
+            }));
+            setIndices(liveIndices);
+          }
+        }
       } catch (error) {
-        console.error("Failed to fetch global indices:", error);
+        console.error("Failed to fetch live indices:", error);
       }
     };
 
     fetchIndices();
-    const interval = setInterval(fetchIndices, 60000); // Update every minute
+    const interval = setInterval(fetchIndices, 3000); // Update every 3 seconds
 
     return () => clearInterval(interval);
   }, []);
@@ -90,11 +92,10 @@ export function GlobalNavbar({ onSettingsClick, onHelpClick }: GlobalNavbarProps
                   {index.value.toFixed(2)}
                 </span>
                 <span
-                  className={`flex items-center gap-1 ${
-                    index.change >= 0
+                  className={`flex items-center gap-1 ${index.change >= 0
                       ? "text-green-600 dark:text-green-400"
                       : "text-red-600 dark:text-red-400"
-                  }`}
+                    }`}
                 >
                   {index.change >= 0 ? (
                     <TrendingUp className="w-3 h-3" />

@@ -155,6 +155,42 @@ services:
       - intraday-network
 
   # ================================================
+  # FYERS DATA BRIDGE (Python/FastAPI) - REAL DATA
+  # ================================================
+  fyers-bridge:
+    build:
+      context: ./services/fyers-bridge
+      dockerfile: Dockerfile
+    container_name: intraday-fyers-bridge
+    ports:
+      - "8005:8005"
+    environment:
+      - FYERS_APP_ID=${FYERS_APP_ID}
+      - FYERS_ACCESS_TOKEN=${FYERS_ACCESS_TOKEN}
+    restart: unless-stopped
+    networks:
+      - intraday-network
+
+  # ================================================
+  # MARKET DATA REALTIME - Continuous FYERS Feed
+  # ================================================
+  market-data-realtime:
+    build:
+      context: ./services/market-data-realtime
+      dockerfile: Dockerfile
+    container_name: intraday-market-data-realtime
+    ports:
+      - "8006:8006"
+    environment:
+      - FYERS_APP_ID=${FYERS_APP_ID}
+      - FYERS_ACCESS_TOKEN=${FYERS_ACCESS_TOKEN}
+      - MONGODB_URI=${MONGODB_URI}
+      - MONGODB_DATABASE=${MONGODB_DATABASE:-intraday_decision}
+    restart: unless-stopped
+    networks:
+      - intraday-network
+
+  # ================================================
   # FRONTEND (Next.js)
   # ================================================
   frontend:

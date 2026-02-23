@@ -8,8 +8,6 @@ spring:
     mongodb:
       uri: ${MONGODB_URI}
       database: ${MONGODB_DATABASE:intraday_decision}
-  webflux:
-    base-path: /api/option-chain
 
 management:
   endpoints:
