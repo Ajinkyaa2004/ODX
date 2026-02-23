@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, AlertCircle, BarChart3 } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { TrendingUp, TrendingDown, AlertCircle, BarChart3, RefreshCw } from 'lucide-react';
+
+const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
 
 interface OptionData {
   openInterest: number;
@@ -38,34 +40,78 @@ interface OptionChainData {
 
 interface OptionChainPanelProps {
   symbol: string;
+  /** Live spot from ticker (updates every 1s) - avoids mismatch with NIFTY 50 / BANKNIFTY ticker */
+  liveSpotPrice?: number;
 }
 
-export default function OptionChainPanel({ symbol }: OptionChainPanelProps) {
+const POLL_MS = 2000;
+
+export default function OptionChainPanel({ symbol, liveSpotPrice }: OptionChainPanelProps) {
   const [chainData, setChainData] = useState<OptionChainData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
+  const [now, setNow] = useState(() => new Date());
+  const mountedRef = useRef(true);
 
+  // Update "now" every second so "Xs ago" and footer visibly change (proves polling is alive)
   useEffect(() => {
-    fetchOptionChain();
-    const interval = setInterval(fetchOptionChain, 180000); // Refresh every 3 minutes
-    return () => clearInterval(interval);
-  }, [symbol]);
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
-  const fetchOptionChain = async () => {
+  const fetchOptionChain = useCallback(async () => {
     try {
-      const response = await fetch(`http://localhost:8080/api/option-chain/${symbol}`);
-      
+      const response = await fetch(`${apiUrl}/api/option-chain/${symbol}?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { Pragma: 'no-cache' },
+      });
       if (!response.ok) throw new Error('Failed to fetch option chain');
-      
       const data = await response.json();
+      if (!mountedRef.current) return;
       setChainData(data);
+      setLastFetchedAt(new Date());
       setError(null);
     } catch (err) {
-      console.error('Error fetching option chain:', err);
-      setError('Failed to load option chain');
+      if (mountedRef.current) {
+        console.error('Error fetching option chain:', err);
+        setError('Failed to load option chain');
+      }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
+  }, [symbol]);
+
+  // Ref so interval always calls latest fetch (never re-run effect = interval never cleared)
+  const fetchRef = useRef(fetchOptionChain);
+  fetchRef.current = fetchOptionChain;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    const tick = () => fetchRef.current?.();
+    tick();
+    const intervalId = setInterval(tick, POLL_MS);
+    return () => {
+      mountedRef.current = false;
+      clearInterval(intervalId);
+    };
+  }, [symbol]); // only when symbol changes (e.g. switch panel); never from parent re-renders
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchRef.current?.();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchOptionChain();
   };
 
   if (loading) {
@@ -84,10 +130,13 @@ export default function OptionChainPanel({ symbol }: OptionChainPanelProps) {
           <div className="p-2 bg-red-50 rounded-lg">
             <AlertCircle className="w-5 h-5 text-red-600" />
           </div>
-          <div>
+          <div className="flex-1">
             <p className="font-semibold text-red-900">Unable to load option chain</p>
             <p className="text-sm text-red-600 mt-1">{error || 'Service unavailable'}</p>
           </div>
+          <button onClick={onRefresh} className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200" title="Retry">
+            <RefreshCw className="w-4 h-4" />
+          </button>
         </div>
       </div>
     );
@@ -119,10 +168,21 @@ export default function OptionChainPanel({ symbol }: OptionChainPanelProps) {
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Option Chain</h2>
             <p className="text-sm text-gray-600 mt-1">
-              {symbol} • Spot: <span className="font-semibold">₹{chainData.spotPrice.toLocaleString()}</span>
+              {symbol} • Spot: <span className="font-semibold">₹{(liveSpotPrice ?? chainData.spotPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              {liveSpotPrice !== undefined && (
+                <span className="ml-1.5 text-xs text-green-600 font-medium">live</span>
+              )}
             </p>
           </div>
         </div>
+        <button
+          onClick={onRefresh}
+          disabled={refreshing}
+          className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+          title="Refresh"
+        >
+          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+        </button>
         <div className="text-right">
           <div className="text-xs text-gray-500 font-medium mb-1">Put/Call Ratio</div>
           <div className="text-3xl font-bold text-blue-600">
@@ -257,8 +317,13 @@ export default function OptionChainPanel({ symbol }: OptionChainPanelProps) {
             <span><span className="font-semibold">LTP:</span> Last Traded Price</span>
             <span><span className="font-semibold">Liq:</span> Liquidity Score</span>
           </div>
-          <div className="text-gray-500">
-            Updated {new Date(chainData.timestamp).toLocaleTimeString()}
+          <div className="text-gray-500 font-medium">
+            Updated {lastFetchedAt ? lastFetchedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--'}
+            {lastFetchedAt && (
+              <span className="ml-1 text-green-600">
+                ({Math.round((now.getTime() - lastFetchedAt.getTime()) / 1000)}s ago, next in {Math.max(0, POLL_MS / 1000 - Math.round((now.getTime() - lastFetchedAt.getTime()) / 1000))}s)
+              </span>
+            )}
           </div>
         </div>
       </div>

@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, AlertCircle, Target, Shield, Activity } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { TrendingUp, TrendingDown, AlertCircle, Target, Shield, Activity, RefreshCw } from 'lucide-react';
+
+const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
 
 interface OIAnalysis {
   symbol: string;
@@ -28,19 +30,12 @@ export default function OIAnalysisPanel({ symbol }: OIAnalysisPanelProps) {
   const [analysis, setAnalysis] = useState<OIAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    fetchAnalysis();
-    const interval = setInterval(fetchAnalysis, 180000); // Refresh every 3 minutes
-    return () => clearInterval(interval);
-  }, [symbol]);
-
-  const fetchAnalysis = async () => {
+  const fetchAnalysis = useCallback(async () => {
     try {
-      const response = await fetch(`http://localhost:8080/api/option-chain/${symbol}/analysis`);
-      
+      const response = await fetch(`${apiUrl}/api/option-chain/${symbol}/analysis`);
       if (!response.ok) throw new Error('Failed to fetch OI analysis');
-      
       const data = await response.json();
       setAnalysis(data);
       setError(null);
@@ -49,7 +44,22 @@ export default function OIAnalysisPanel({ symbol }: OIAnalysisPanelProps) {
       setError('Failed to load OI analysis');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  }, [symbol]);
+
+  const fetchRef = useRef(fetchAnalysis);
+  fetchRef.current = fetchAnalysis;
+  useEffect(() => {
+    const tick = () => fetchRef.current?.();
+    tick();
+    const interval = setInterval(tick, 5000);
+    return () => clearInterval(interval);
+  }, [symbol]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchAnalysis();
   };
 
   if (loading) {
@@ -68,10 +78,13 @@ export default function OIAnalysisPanel({ symbol }: OIAnalysisPanelProps) {
           <div className="p-2 bg-red-50 rounded-lg">
             <AlertCircle className="w-5 h-5 text-red-600" />
           </div>
-          <div>
+          <div className="flex-1">
             <p className="font-semibold text-red-900">Unable to load OI analysis</p>
             <p className="text-sm text-red-600 mt-1">{error || 'Service unavailable'}</p>
           </div>
+          <button onClick={onRefresh} className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200" title="Retry">
+            <RefreshCw className="w-4 h-4" />
+          </button>
         </div>
       </div>
     );
@@ -123,7 +136,7 @@ export default function OIAnalysisPanel({ symbol }: OIAnalysisPanelProps) {
   return (
     <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow duration-200">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-6 flex justify-between items-start">
         <div className="flex items-center gap-3 mb-3">
           <div className="p-2 bg-purple-50 rounded-lg">
             <Target className="w-6 h-6 text-purple-600" />
@@ -133,6 +146,14 @@ export default function OIAnalysisPanel({ symbol }: OIAnalysisPanelProps) {
             <p className="text-sm text-gray-600">{symbol} • Open Interest Intelligence</p>
           </div>
         </div>
+        <button
+          onClick={onRefresh}
+          disabled={refreshing}
+          className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+          title="Refresh"
+        >
+          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       {/* Overall Sentiment */}

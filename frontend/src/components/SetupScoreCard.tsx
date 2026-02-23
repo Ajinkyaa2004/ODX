@@ -55,6 +55,10 @@ interface SetupScoreCardProps {
   timeframe?: string;
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
+const SCORE_404_RETRY_MS = 45000; // When score returns 404, retry only every 45s to avoid console spam
+const SCORE_OK_POLL_MS = 60000;   // When we have data, refresh every 60s as backup to socket
+
 export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreCardProps) {
   const [scoreData, setScoreData] = useState<ScoreData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,14 +68,13 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
   const fetchScore = useCallback(async () => {
     try {
       const response = await fetch(
-        `http://localhost:8080/api/quant/score/${symbol}?timeframe=${timeframe}`
+        `${API_BASE}/api/quant/score/${symbol}?timeframe=${timeframe}`
       );
 
       if (response.status === 404) {
-        // Score not available yet - quant engine needs more data
-        setError('Score calculation pending - collecting market data...');
+        setError('Score pending — waiting for market data (quant engine). Updates via socket when ready.');
         setLoading(false);
-        return;
+        return false; // caller can use backoff
       }
 
       if (!response.ok) throw new Error('Failed to fetch score');
@@ -79,35 +82,32 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
       const data = await response.json();
       setScoreData(data);
       setError(null);
-    } catch (err) {
-      console.error('Error fetching score:', err);
-      setError('Waiting for quant engine data...');
-    } finally {
       setLoading(false);
+      return true;
+    } catch (err) {
+      setError('Waiting for quant engine...');
+      setLoading(false);
+      return false;
     }
   }, [symbol, timeframe]);
 
-  // Socket.io connection for real-time updates
+  // Socket.io for real-time score updates (primary; no polling spam when 404)
+  const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:9092';
   useEffect(() => {
-    const socketInstance = io('http://localhost:8080', {
+    const socketInstance = io(wsUrl, {
       transports: ['websocket', 'polling'],
       path: '/socket.io'
     });
 
     socketInstance.on('connect', () => {
-      console.log('SetupScoreCard: Socket.io connected to quant-engine');
       setIsRealTime(true);
       socketInstance.emit('subscribe', `${symbol}_${timeframe}`);
       socketInstance.emit('subscribe', symbol);
     });
 
-    socketInstance.on('disconnect', () => {
-      console.log('SetupScoreCard: Socket.io disconnected');
-      setIsRealTime(false);
-    });
+    socketInstance.on('disconnect', () => setIsRealTime(false));
 
     socketInstance.on('setup_score_update', (data: any) => {
-      console.log('SetupScoreCard: Received real-time update:', data);
       if (data.symbol === symbol && data.timeframe === timeframe) {
         setScoreData({
           symbol: data.symbol,
@@ -123,15 +123,29 @@ export default function SetupScoreCard({ symbol, timeframe = "5m" }: SetupScoreC
       }
     });
 
-    return () => {
-      socketInstance.disconnect();
-    };
-  }, [symbol, timeframe]);
+    return () => socketInstance.disconnect();
+  }, [symbol, timeframe, wsUrl]);
 
+  // One initial fetch; then backoff (45s) on 404 to avoid console spam, or 60s poll when we have data
   useEffect(() => {
-    fetchScore();
-    const interval = setInterval(fetchScore, 180000);
-    return () => clearInterval(interval);
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNext = (delayMs: number) => {
+      if (cancelled) return;
+      timeoutId = setTimeout(async () => {
+        if (cancelled) return;
+        const ok = await fetchScore();
+        if (cancelled) return;
+        scheduleNext(ok ? SCORE_OK_POLL_MS : SCORE_404_RETRY_MS);
+      }, delayMs);
+    };
+
+    scheduleNext(0);
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [fetchScore]);
 
   if (loading) {

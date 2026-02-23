@@ -7,6 +7,8 @@ import com.intraday.optionchain.scheduler.OptionChainScheduler;
 import com.intraday.optionchain.service.OptionChainService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
@@ -33,12 +35,19 @@ public class OptionChainController {
      * @param symbol NIFTY or BANKNIFTY
      * @return Latest option chain data with all strikes (ATM ±2)
      */
+    /**
+     * Get latest option chain. Response is never cached so every poll gets fresh data.
+     */
     @GetMapping("/{symbol}")
     public Mono<ResponseEntity<OptionChainSnapshot>> getOptionChain(@PathVariable String symbol) {
         log.info("GET /api/option-chain/{}", symbol);
-        
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setCacheControl(CacheControl.noStore().mustRevalidate());
+        headers.setPragma("no-cache");
+
         return optionChainService.getLatestSnapshot(symbol)
-            .map(ResponseEntity::ok)
+            .map(snapshot -> ResponseEntity.ok().headers(headers).body(snapshot))
             .defaultIfEmpty(ResponseEntity.notFound().build());
     }
     

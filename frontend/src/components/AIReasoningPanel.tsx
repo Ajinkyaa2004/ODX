@@ -5,6 +5,8 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
+const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+
 interface AIReasoningData {
   trade_reasoning: string;
   key_strengths: string[];
@@ -35,7 +37,7 @@ export function AIReasoningPanel({
 
   const generateReasoning = async () => {
     if (!evaluationData) {
-      setError("No evaluation data available");
+      setError("Evaluation data not ready. It comes from OI analysis and live prices — wait a few seconds and try again.");
       return;
     }
 
@@ -43,7 +45,7 @@ export function AIReasoningPanel({
     setError(null);
 
     try {
-      const response = await fetch("http://localhost:8002/api/ai/generate-reasoning", {
+      const response = await fetch(`${apiUrl}/api/ai/generate-reasoning`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -63,7 +65,7 @@ export function AIReasoningPanel({
       }
     } catch (err) {
       console.error("Error generating reasoning:", err);
-      setError("Failed to connect to AI service");
+      setError("Cannot reach AI service. Ensure API Gateway and AI Reasoning service (port 8002) are running.");
     } finally {
       setIsLoading(false);
     }
@@ -215,10 +217,15 @@ export function AIReasoningPanel({
 
           {/* Empty State */}
           {!reasoning && !isLoading && !error && (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-8 text-gray-500 space-y-2">
               <p className="text-sm">
-                Click &quot;Generate&quot; to get AI-powered analysis of this setup
+                Click &quot;Generate&quot; to get AI-powered analysis of this setup.
               </p>
+              {!evaluationData && (
+                <p className="text-xs text-amber-600">
+                  Generate is disabled until evaluation data is loaded (OI analysis + prices, ~3s after page load).
+                </p>
+              )}
             </div>
           )}
         </CardContent>

@@ -25,10 +25,10 @@ public class OptionChainScheduler {
     // private static final LocalTime MARKET_CLOSE = LocalTime.of(15, 30);
     
     /**
-     * Fetch option chain data every 3 minutes (180000 ms)
+     * Fetch option chain data every 15 seconds for real-time updates
      * Only runs during market hours
      */
-    @Scheduled(fixedDelay = 180000, initialDelay = 10000)
+    @Scheduled(fixedDelay = 15000, initialDelay = 3000)
     public void fetchOptionChainData() {
         LocalTime now = LocalTime.now();
         

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { useSocketIO } from '@/hooks/useSocketIO';
 import { TrendingUp, TrendingDown, Activity, Wifi, WifiOff, BarChart3, LineChart, RefreshCw } from 'lucide-react';
 import SetupScoreCard from '@/components/SetupScoreCard';
@@ -14,7 +15,8 @@ import { GlobalNavbar } from '@/components/GlobalNavbar';
 import { SettingsPanel, useSettings } from '@/components/SettingsPanel';
 import { AlertManager } from '@/components/AlertManager';
 import { HelpModal } from '@/components/HelpModal';
-import PriceChart from '@/components/PriceChart';
+
+const PriceChart = dynamic(() => import('@/components/PriceChart'), { ssr: false });
 
 interface Indicator {
   ema: {
@@ -236,12 +238,15 @@ export default function DashboardPage() {
     }
   }, [apiUrl, livePrices]);
 
-  // Poll live prices every 2 seconds
+  // Live prices: real-time every 1 second (ref keeps interval stable so it never stops)
+  const fetchLivePricesRef = useRef(fetchLivePrices);
+  fetchLivePricesRef.current = fetchLivePrices;
   useEffect(() => {
-    fetchLivePrices();
-    const interval = setInterval(fetchLivePrices, 2000);
+    const tick = () => fetchLivePricesRef.current?.();
+    tick();
+    const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [fetchLivePrices]);
+  }, []);
 
   // Update market status every 30 seconds
   useEffect(() => {
@@ -251,33 +256,79 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch evaluation data for AI panels (every 3 minutes)
+  // Evaluation data for AI panels: real-time every 15 seconds
+  const fetchEvaluationDataRef = useRef(fetchEvaluationData);
+  fetchEvaluationDataRef.current = fetchEvaluationData;
   useEffect(() => {
     const fetchEvals = async () => {
       const [niftyEval, bankniftyEval] = await Promise.all([
-        fetchEvaluationData('NIFTY'),
-        fetchEvaluationData('BANKNIFTY'),
+        fetchEvaluationDataRef.current('NIFTY'),
+        fetchEvaluationDataRef.current('BANKNIFTY'),
       ]);
       if (niftyEval) setNiftyEvaluation(niftyEval);
       if (bankniftyEval) setBankniftyEvaluation(bankniftyEval);
     };
-    
-    // Delay initial fetch to let prices load first
-    const timeout = setTimeout(fetchEvals, 3000);
-    const interval = setInterval(fetchEvals, 180000); // Refresh every 3 min
-    
+    const t = setTimeout(fetchEvals, 2000);
+    const interval = setInterval(fetchEvals, 15000);
     return () => {
-      clearTimeout(timeout);
+      clearTimeout(t);
       clearInterval(interval);
     };
-  }, [fetchEvaluationData]);
-
-  // Subscribe to socket channels as backup
-  useEffect(() => {
-    subscribe('NIFTY');
-    subscribe('BANKNIFTY');
-    return () => {};
   }, []);
+
+  // Subscribe to socket when connected so we get live price/score updates
+  useEffect(() => {
+    if (connected) {
+      subscribe('NIFTY');
+      subscribe('BANKNIFTY');
+    }
+  }, [connected, subscribe]);
+
+  // Fetch 5m/15m indicators (EMA, VWAP): real-time every 15 seconds
+  useEffect(() => {
+    const symbols = ['NIFTY', 'BANKNIFTY'] as const;
+    const timeframes = ['5m', '15m'] as const;
+    const base = apiUrl;
+
+    const fetchIndicators = async () => {
+      const next: Record<string, Record<string, Indicator>> = {};
+      for (const symbol of symbols) {
+        next[symbol] = {};
+        for (const tf of timeframes) {
+          try {
+            const res = await fetch(`${base}/api/quant/indicators/${symbol}?timeframe=${tf}`);
+            if (!res.ok) continue;
+            const raw = await res.json();
+            const ema = raw?.ema;
+            const vwap = raw?.vwap;
+            if (ema && vwap) {
+              next[symbol][tf] = {
+                ema: {
+                  ema9: Number(ema.ema9),
+                  ema20: Number(ema.ema20),
+                  ema50: Number(ema.ema50),
+                  slope: String(ema.slope || 'neutral'),
+                  alignment: String(ema.alignment || 'mixed'),
+                },
+                vwap: {
+                  value: Number(vwap.value),
+                  position: String(vwap.position || 'at'),
+                  distance: Number(vwap.distance ?? 0),
+                },
+              };
+            }
+          } catch {
+            // skip this symbol/tf on error
+          }
+        }
+      }
+      setIndicators((prev) => ({ ...prev, ...next }));
+    };
+
+    fetchIndicators();
+    const interval = setInterval(fetchIndicators, 15000);
+    return () => clearInterval(interval);
+  }, [apiUrl]);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -540,7 +591,7 @@ export default function DashboardPage() {
           {/* Phase 3: Option Chain Intelligence */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
             <div className="lg:col-span-2">
-              <OptionChainPanel symbol="NIFTY" />
+              <OptionChainPanel symbol="NIFTY" liveSpotPrice={prices.NIFTY?.price} />
             </div>
             <div>
               <OIAnalysisPanel symbol="NIFTY" />
@@ -694,7 +745,7 @@ export default function DashboardPage() {
           {/* Phase 3: Option Chain Intelligence */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
             <div className="lg:col-span-2">
-              <OptionChainPanel symbol="BANKNIFTY" />
+              <OptionChainPanel symbol="BANKNIFTY" liveSpotPrice={prices.BANKNIFTY?.price} />
             </div>
             <div>
               <OIAnalysisPanel symbol="BANKNIFTY" />

@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, AlertCircle, Target, Award } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { TrendingUp, TrendingDown, AlertCircle, Target, Award, RefreshCw } from 'lucide-react';
+
+const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
 
 interface StrikeRecommendation {
   symbol: string;
@@ -28,28 +30,36 @@ export default function StrikeRecommendationCard({ symbol }: StrikeRecommendatio
   const [recommendations, setRecommendations] = useState<StrikeRecommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    fetchRecommendations();
-    const interval = setInterval(fetchRecommendations, 180000); // Refresh every 3 minutes
-    return () => clearInterval(interval);
-  }, [symbol]);
-
-  const fetchRecommendations = async () => {
+  const fetchRecommendations = useCallback(async () => {
     try {
-      const response = await fetch(`http://localhost:8080/api/option-chain/${symbol}/recommended`);
-      
+      const response = await fetch(`${apiUrl}/api/option-chain/${symbol}/recommended`);
       if (!response.ok) throw new Error('Failed to fetch recommendations');
-      
       const data = await response.json();
-      setRecommendations(data);
+      setRecommendations(Array.isArray(data) ? data : []);
       setError(null);
     } catch (err) {
       console.error('Error fetching recommendations:', err);
       setError('Failed to load recommendations');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  }, [symbol]);
+
+  const fetchRef = useRef(fetchRecommendations);
+  fetchRef.current = fetchRecommendations;
+  useEffect(() => {
+    const tick = () => fetchRef.current?.();
+    tick();
+    const interval = setInterval(tick, 5000);
+    return () => clearInterval(interval);
+  }, [symbol]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchRecommendations();
   };
 
   if (loading) {
@@ -71,10 +81,13 @@ export default function StrikeRecommendationCard({ symbol }: StrikeRecommendatio
           <div className="p-2 bg-red-50 rounded-lg">
             <AlertCircle className="w-5 h-5 text-red-600" />
           </div>
-          <div>
+          <div className="flex-1">
             <p className="font-semibold text-red-900">Unable to load recommendations</p>
             <p className="text-sm text-red-600 mt-1">{error || 'Service unavailable'}</p>
           </div>
+          <button onClick={onRefresh} className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200" title="Retry">
+            <RefreshCw className="w-4 h-4" />
+          </button>
         </div>
       </div>
     );
@@ -175,7 +188,7 @@ export default function StrikeRecommendationCard({ symbol }: StrikeRecommendatio
   return (
     <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow duration-200">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-6 flex justify-between items-start">
         <div className="flex items-center gap-3 mb-2">
           <div className="p-2 bg-indigo-50 rounded-lg">
             <Target className="w-6 h-6 text-indigo-600" />
@@ -185,6 +198,14 @@ export default function StrikeRecommendationCard({ symbol }: StrikeRecommendatio
             <p className="text-sm text-gray-600">{symbol} • AI-powered strike selection</p>
           </div>
         </div>
+        <button
+          onClick={onRefresh}
+          disabled={refreshing}
+          className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+          title="Refresh"
+        >
+          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       {/* No recommendations */}
@@ -232,7 +253,7 @@ export default function StrikeRecommendationCard({ symbol }: StrikeRecommendatio
 
       {/* Footer */}
       <div className="mt-6 pt-4 border-t border-gray-200 text-xs text-gray-500 text-center">
-        Recommendations refresh every 3 minutes • Based on OI build-up analysis
+        Updates every 5s • Based on OI build-up analysis
       </div>
     </div>
   );

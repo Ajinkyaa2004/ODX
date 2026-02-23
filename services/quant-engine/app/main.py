@@ -135,6 +135,45 @@ async def root():
     }
 
 
+@app.get("/api/quant/indicators/{symbol}")
+async def get_indicators(symbol: str, timeframe: str = "5m"):
+    """
+    Get latest EMA + VWAP indicators for a symbol and timeframe.
+    Used by dashboard for 5-Minute / 15-Minute Timeframe boxes.
+    If no stored data, computes from OHLC when available.
+    """
+    try:
+        result = await indicator_service.get_latest_indicators(symbol=symbol, timeframe=timeframe)
+        if result:
+            # Ensure JSON-serializable (timestamp may be datetime)
+            ts = result.get("timestamp")
+            if hasattr(ts, "isoformat"):
+                result = {**result, "timestamp": ts.isoformat()}
+            return result
+        # No stored indicators: compute from OHLC if available
+        df_ohlc = await indicator_service.fetch_ohlc_data(symbol=symbol, timeframe=timeframe, hours=4)
+        if df_ohlc is None or len(df_ohlc) < 20:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Insufficient OHLC data for {symbol} ({timeframe}). Ensure market-data is running and has data."
+            )
+        indicators = await indicator_service.calculate_indicators(df_ohlc)
+        if not indicators:
+            raise HTTPException(status_code=503, detail="Indicator calculation failed")
+        return {
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "timestamp": datetime.utcnow().isoformat(),
+            "ema": indicators.get("ema"),
+            "vwap": indicators.get("vwap"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_indicators for {symbol} ({timeframe}): {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================================================
 # Phase 2: Scoring API Endpoints
 # ============================================================================

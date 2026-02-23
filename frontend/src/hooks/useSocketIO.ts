@@ -57,30 +57,19 @@ export function useSocketIO(url: string) {
       reconnectionDelay: 1000,
     });
 
-    socketInstance.on('connect', () => {
-      console.log('Socket.io connected');
-      setConnected(true);
-    });
-
-    socketInstance.on('disconnect', () => {
-      console.log('Socket.io disconnected');
-      setConnected(false);
-    });
+    socketInstance.on('connect', () => setConnected(true));
+    socketInstance.on('disconnect', () => setConnected(false));
 
     socketInstance.on('price_update', (data: LivePrice) => {
-      console.log('Price update:', data);
       setPrices((prev) => ({
         ...prev,
         [data.symbol]: data,
       }));
     });
 
-    socketInstance.on('market_status', (data: MarketStatus) => {
-      console.log('Market status:', data);
-      setMarketStatus(data);
-    });
+    socketInstance.on('market_status', (data: MarketStatus) => setMarketStatus(data));
+
     socketInstance.on('option_chain_update', (data: OptionChainUpdate) => {
-      console.log('Option chain update:', data);
       setOptionChainData((prev) => ({
         ...prev,
         [data.symbol]: data,
@@ -88,7 +77,6 @@ export function useSocketIO(url: string) {
     });
 
     socketInstance.on('oi_analysis_update', (data: OIAnalysisUpdate) => {
-      console.log('OI analysis update:', data);
       setOIAnalysisData((prev) => ({
         ...prev,
         [data.symbol]: data,
@@ -96,7 +84,6 @@ export function useSocketIO(url: string) {
     });
 
     socketInstance.on('setup_score_update', (data: SetupScoreUpdate) => {
-      console.log('Setup score update:', data);
       const key = `${data.symbol}_${data.timeframe}`;
       setSetupScores((prev) => ({
         ...prev,
@@ -111,17 +98,11 @@ export function useSocketIO(url: string) {
   }, [url]);
 
   const subscribe = (symbol: string) => {
-    if (socket && connected) {
-      console.log(`Subscribing to ${symbol}`);
-      socket.emit('subscribe', symbol);
-    }
+    if (socket && connected) socket.emit('subscribe', symbol);
   };
 
   const unsubscribe = (symbol: string) => {
-    if (socket && connected) {
-      console.log(`Unsubscribing from ${symbol}`);
-      socket.emit('unsubscribe', symbol);
-    }
+    if (socket && connected) socket.emit('unsubscribe', symbol);
   };
 
   return {

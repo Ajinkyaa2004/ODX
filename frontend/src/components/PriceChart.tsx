@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+
+const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
 import { 
   ComposedChart, 
   Bar, 
@@ -43,29 +45,22 @@ export default function PriceChart({ symbol, initialTimeframe = "5m", atmStrike 
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
-  useEffect(() => {
-    fetchChartData();
-    const interval = setInterval(fetchChartData, 60000); // Update every minute
-    return () => clearInterval(interval);
-  }, [symbol, timeframe]);
-
-  const fetchChartData = async () => {
+  const fetchChartData = useCallback(async () => {
     try {
       const response = await fetch(
-        `http://localhost:8080/api/market-data/ohlc/${symbol}?timeframe=${timeframe}&limit=50`
+        `${apiUrl}/api/market-data/ohlc/${symbol}?timeframe=${timeframe}&limit=50`
       );
-      
       if (!response.ok) throw new Error('Failed to fetch chart data');
-      
-      const data = await response.json();
-      
-      // Format data for chart
+      const raw = await response.json();
+      const data = Array.isArray(raw) ? raw : (raw?.data ?? raw?.candles ?? []);
+      if (!Array.isArray(data)) {
+        setChartData([]);
+        setError('Invalid chart data');
+        return;
+      }
       const formattedData = data.map((candle: any) => ({
         timestamp: candle.timestamp,
-        time: new Date(candle.timestamp).toLocaleTimeString('en-IN', { 
-          hour: '2-digit', 
-          minute: '2-digit' 
-        }),
+        time: new Date(candle.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
         open: Number(candle.open),
         high: Number(candle.high),
         low: Number(candle.low),
@@ -76,7 +71,6 @@ export default function PriceChart({ symbol, initialTimeframe = "5m", atmStrike 
         ema50: candle.ema50 ? Number(candle.ema50) : undefined,
         vwap: candle.vwap ? Number(candle.vwap) : undefined
       }));
-      
       setChartData(formattedData);
       setLastUpdate(new Date());
       setError(null);
@@ -86,7 +80,13 @@ export default function PriceChart({ symbol, initialTimeframe = "5m", atmStrike 
     } finally {
       setLoading(false);
     }
-  };
+  }, [symbol, timeframe]);
+
+  useEffect(() => {
+    fetchChartData();
+    const interval = setInterval(fetchChartData, 15000);
+    return () => clearInterval(interval);
+  }, [fetchChartData]);
 
   // Custom candlestick renderer
   const CandleStick = (props: any) => {
@@ -216,6 +216,20 @@ export default function PriceChart({ symbol, initialTimeframe = "5m", atmStrike 
   const latestCandle = chartData[chartData.length - 1];
   const isGreen = latestCandle && latestCandle.close > latestCandle.open;
 
+  if (chartData.length === 0) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-6">
+        <p className="text-gray-500 dark:text-gray-400">No chart data available. The market data service may be offline.</p>
+        <button
+          onClick={fetchChartData}
+          className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+        >
+          <RefreshCw className="w-4 h-4" /> Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-6">
       {/* Header */}
@@ -273,16 +287,25 @@ export default function PriceChart({ symbol, initialTimeframe = "5m", atmStrike 
             stroke="#6b7280"
           />
           <YAxis 
+            yAxisId="price"
             domain={['auto', 'auto']}
             tick={{ fontSize: 12 }}
             stroke="#6b7280"
             tickFormatter={(value) => `₹${value.toFixed(0)}`}
+          />
+          <YAxis 
+            yAxisId="volume"
+            orientation="right"
+            tick={{ fontSize: 10 }}
+            stroke="#9ca3af"
+            tickFormatter={(value) => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : String(value)}
           />
           <Tooltip content={<CustomTooltip />} />
           
           {/* ATM Strike Line */}
           {atmStrike && (
             <ReferenceLine 
+              yAxisId="price"
               y={atmStrike} 
               stroke="#f59e0b" 
               strokeDasharray="5 5"
@@ -299,6 +322,7 @@ export default function PriceChart({ symbol, initialTimeframe = "5m", atmStrike 
           
           {/* EMA Lines */}
           <Line 
+            yAxisId="price"
             type="monotone" 
             dataKey="ema9" 
             stroke="#3b82f6" 
@@ -307,6 +331,7 @@ export default function PriceChart({ symbol, initialTimeframe = "5m", atmStrike 
             name="EMA 9"
           />
           <Line 
+            yAxisId="price"
             type="monotone" 
             dataKey="ema20" 
             stroke="#8b5cf6" 
@@ -315,6 +340,7 @@ export default function PriceChart({ symbol, initialTimeframe = "5m", atmStrike 
             name="EMA 20"
           />
           <Line 
+            yAxisId="price"
             type="monotone" 
             dataKey="ema50" 
             stroke="#06b6d4" 
@@ -326,6 +352,7 @@ export default function PriceChart({ symbol, initialTimeframe = "5m", atmStrike 
           
           {/* VWAP Line */}
           <Line 
+            yAxisId="price"
             type="monotone" 
             dataKey="vwap" 
             stroke="#f59e0b" 
